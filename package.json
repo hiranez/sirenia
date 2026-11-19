@@ -1,0 +1,35 @@
+{
+  "name": "sirenia",
+  "version": "1.2.0",
+  "description": "Sirenia: an editor and render service that turn Mermaid diagrams into self-contained SVG and PNG files.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "dependencies": {
+    "axios": "^1.20.0",
+    "png-chunks-extract": "^1.0.0",
+    "puppeteer": "^25.16.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "packs": "node scripts/packs.mjs",
+    "icons:gcp": "node scripts/build-gcp-icon-pack.mjs",
+    "icons:gcp:check": "node scripts/build-gcp-icon-pack.mjs --check"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hiranez/sirenia.git"
+  },
+  "keywords": [],
+  "author": "Hiram Sanchez",
+  "license": "Apache-2.0",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/hiranez/sirenia/issues"
+  },
+  "homepage": "https://github.com/hiranez/sirenia#readme",
+  "devDependencies": {
+    "fflate": "^0.8.2"
+  }
+}

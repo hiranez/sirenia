@@ -1,0 +1,9 @@
+{
+  "prefix": "plain",
+  "info": { "name": "Plain shapes" },
+  "width": 16,
+  "height": 16,
+  "icons": {
+    "bar": { "body": "<rect x=\"2\" y=\"6\" width=\"12\" height=\"4\" fill=\"currentColor\"/>" }
+  }
+}

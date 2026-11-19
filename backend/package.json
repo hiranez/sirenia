@@ -1,0 +1,30 @@
+{
+  "name": "sirenia-renderer",
+  "version": "1.2.0",
+  "description": "Backend service that renders Mermaid diagrams to SVG/PNG with embedded provenance metadata.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node tests/metadata.test.js && node tests/icons.test.js && node tests/gcp-pack.test.js && node tests/externalRefs.test.js && node tests/lifecycle.test.js"
+  },
+  "keywords": [],
+  "author": "Hiram Sanchez",
+  "license": "Apache-2.0",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
+    "express-rate-limit": "^7.5.1",
+    "helmet": "^8.3.0",
+    "mermaid": "^11.17.2",
+    "png-chunks-encode": "^1.0.0",
+    "png-chunks-extract": "^1.0.0",
+    "puppeteer": "^25.16.0"
+  },
+  "overrides": {
+    "body-parser": "^2.4.0"
+  }
+}

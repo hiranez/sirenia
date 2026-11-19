@@ -1,0 +1,22 @@
+# Sirenia for local use: the editor and the render service in one container (root Dockerfile),
+# icon packs in a named volume. Then open http://localhost:8080
+#
+#   Start:       docker compose up -d --build
+#   Add a pack:  docker compose run --rm sirenia packs add gcp
+#                docker compose restart sirenia
+#
+# The packs command shows the vendor's terms and asks you to accept them before it downloads
+# anything. "docker compose run --rm sirenia packs list" shows the recipes and installed packs.
+services:
+  sirenia:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - sirenia-packs:/packs
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+volumes:
+  sirenia-packs:

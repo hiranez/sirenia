@@ -1,0 +1,81 @@
+name: gcp-icons-upstream
+
+# Keeps the Google Cloud icon recipe honest:
+#  - weekly: re-download Google's official icon ZIPs and verify the SHA-256 pins + regenerate; if Google
+#    republished the icons (they update in place) or the committed packs/catalog drifted from
+#    icons/gcp/mapping.json, open/refresh an issue for a human review (advisory — never blocks merges).
+#  - on PRs that touch the icon sources: the same check, but blocking (the generated files must match).
+# The same file runs in the hosted edition (marker: backend/cloudbuild.yaml), which commits the packs and
+# checks them with --check, and in the public copy, which commits none: there the generator writes into
+# a temporary directory, which still downloads from Google and verifies the pinned checksums.
+on:
+  schedule:
+    - cron: '23 5 * * 2' # Tuesdays 05:23 UTC
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - 'icons/gcp/**'
+      - 'scripts/build-gcp-icon-pack.mjs'
+      - 'scripts/packs/**'
+      - 'backend/packs/**'
+      - 'frontend/public/packs/**'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Pinned upstream + generated packs in sync
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Install generator dependency (root devDependencies only)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+      - id: check
+        name: Verify checksums and regenerate
+        run: |
+          if [ -f backend/cloudbuild.yaml ]; then
+            node scripts/build-gcp-icon-pack.mjs --check 2>&1 | tee check.log
+          else
+            node scripts/build-gcp-icon-pack.mjs --no-docs --out "$RUNNER_TEMP/packs/gcp.json" 2>&1 | tee check.log
+          fi
+        continue-on-error: true
+        shell: bash
+      - name: Fail PRs that drift
+        if: github.event_name == 'pull_request' && steps.check.outcome == 'failure'
+        run: |
+          echo "::error::Generated icon packs/catalog are out of date or upstream checksums changed. Review icons/gcp/mapping.json; where the packs are committed, regenerate them with: npm run icons:gcp"
+          exit 1
+      - name: Open or refresh review issue (scheduled runs)
+        if: github.event_name != 'pull_request' && steps.check.outcome == 'failure'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+            const log = fs.existsSync('check.log') ? fs.readFileSync('check.log', 'utf8').slice(-6000) : '(no log)';
+            const title = 'Google Cloud icon pack: upstream changed or generated files drifted';
+            const body = [
+              'The weekly `gcp-icons-upstream` check failed. Either Google republished the official icon ZIPs',
+              '(review the new icons, update `upstream.zips.*.sha256` and affected products in `icons/gcp/mapping.json`,',
+              'bump `version`, run `npm run icons:gcp`) or, where packs are committed, they no longer match `mapping.json`.',
+              '', 'Google periodically retires icons and asks that stale ones stop being used, so treat this as a review task.',
+              '', 'The rules the recipe follows are in `icons/gcp/README.md`.', '', '```', log, '```',
+              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            ].join('\n');
+            const { data: open } = await github.rest.issues.listForRepo({ ...context.repo, state: 'open', labels: 'gcp-icons', per_page: 10 });
+            const existing = open.find((i) => i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: existing.number, body });
+            } else {
+              await github.rest.issues.create({ ...context.repo, title, body, labels: ['gcp-icons'] });
+            }

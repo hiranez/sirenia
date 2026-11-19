@@ -1,0 +1,58 @@
+# Build context of the root Dockerfile (the local image). Allow-list: everything is excluded, then
+# exactly what the Dockerfile copies is let back in. backend/ and frontend/ have their own
+# .dockerignore files for the hosted images; this one does not affect them.
+*
+
+# Root: the pack generator's dependency (lockfile), licence and notices.
+!package.json
+!package-lock.json
+!LICENSE
+!NOTICE.md
+
+# Render service: source only.
+!backend/package.json
+!backend/package-lock.json
+!backend/index.js
+!backend/routes/
+!backend/utils/
+
+# Editor sources (built in the image) and the proxy.
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/index.html
+!frontend/vite.config.ts
+!frontend/tsconfig.json
+!frontend/tsconfig.app.json
+!frontend/tsconfig.node.json
+!frontend/src/
+!frontend/public/
+!frontend/branding/
+!frontend/auth-proxy.js
+!frontend/upstream.js
+
+# The packs command, its index builder and the Google Cloud generator; recipes as text only.
+!scripts/packs.mjs
+!scripts/packs/
+!scripts/build-gcp-icon-pack.mjs
+!icons/*/mapping.json
+!icons/*/README.md
+
+# The launcher.
+!docker/entrypoint.mjs
+
+# Never in the context, even inside a directory let in above (the last matching line wins).
+backend/packs
+frontend/public/packs
+frontend/dist
+**/gcp*.json
+**/node_modules
+**/tests
+**/*.test.*
+**/*.log
+**/.env*
+**/.DS_Store
+.git
+.cache
+Docs
+terraform
+config

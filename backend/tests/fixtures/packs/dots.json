@@ -1,0 +1,20 @@
+{
+  "prefix": "dots",
+  "sirenia": {
+    "format": 1,
+    "label": "Dots",
+    "owner": "Sample Ltd",
+    "notice": {
+      "editor": "Dots are test artwork of Sample Ltd.",
+      "editorAfter": "Used in tests only.",
+      "export": "Dots are test artwork of Sample Ltd."
+    }
+  },
+  "width": 24,
+  "height": 24,
+  "icons": {
+    "dot": {
+      "body": "<defs><linearGradient id=\"g\"><stop offset=\"0\" stop-color=\"#000\"/><stop offset=\"1\" stop-color=\"#fff\"/></linearGradient><circle id=\"c\" cx=\"12\" cy=\"12\" r=\"4\"/></defs><use href=\"#c\" fill=\"url(#g)\"/><use xlink:href=\"#c\" x=\"6\"/>"
+    }
+  }
+}

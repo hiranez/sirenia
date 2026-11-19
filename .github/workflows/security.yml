@@ -1,0 +1,444 @@
+name: security
+
+# Supply-chain + build gate. Runs on PRs to main, pushes to main, and weekly
+# (to catch newly-disclosed advisories in already-merged dependencies).
+#
+# Every action is pinned to a full commit SHA (release tag in the trailing comment).
+# Tags are mutable and third-party action tags have been hijacked before; SHAs are not.
+#
+# This file runs unchanged in two trees: the hosted edition (which has backend/cloudbuild.yaml and
+# commits the Google Cloud icon pack) and its public export (which has neither). The presence of
+# backend/cloudbuild.yaml is the marker of the hosted edition; the pack file is deliberately not the
+# marker, so that deleting the pack from the hosted tree fails CI instead of switching its checks off.
+# The `public-export` job builds the public copy from the hosted tree and tests it on its own; in
+# the public copy itself it does nothing.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 4 * * 1' # Mondays 04:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-audit:
+    name: npm audit (production deps, fail on high+)
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [backend, frontend]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      # Fail the pipeline on any high/critical advisory in PRODUCTION dependencies.
+      - name: Audit ${{ matrix.dir }}
+        working-directory: ${{ matrix.dir }}
+        run: npm audit --omit=dev --audit-level=high
+      # Only permissive licences may ship (allow-list: scripts/licenses/policy.json).
+      - name: Licences of production dependencies (${{ matrix.dir }})
+        run: node scripts/licenses/check-licenses.mjs ${{ matrix.dir }}
+
+  # No CodeQL / SARIF upload: this is a private repository with GitHub Code Security
+  # disabled, so code scanning is unavailable (uploads fail with 403). Enabling Code Security
+  # would allow adding CodeQL and uploading the Trivy results as SARIF.
+
+  image-scan:
+    name: Build images + Trivy scan
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, frontend]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      # Building here doubles as a pre-merge check of the Dockerfiles Cloud Build will use.
+      - name: Build ${{ matrix.service }} image
+        run: docker build -t local/${{ matrix.service }}:${{ github.sha }} ./${{ matrix.service }}
+      # Run the built image the way Cloud Run will and exercise it before it can reach prod.
+      - name: Smoke test backend image
+        if: matrix.service == 'backend'
+        run: |
+          # Hosted edition: the image bundles the Google Cloud pack. Public copy: no pack is committed,
+          # so the container gets the test fixture packs (read-only) to let the pack checks run there too.
+          packs_args=()
+          if [ ! -f backend/cloudbuild.yaml ]; then
+            packs_args=(-v "$PWD/backend/tests/fixtures/packs:/fixture-packs:ro" -e PACKS_DIR=/fixture-packs)
+          fi
+          # host.docker.internal lets the container reach the runner (used by the invariant gate below).
+          docker run -d --name svc --add-host=host.docker.internal:host-gateway "${packs_args[@]}" -p 8080:8080 "local/backend:${{ github.sha }}"
+          for i in $(seq 1 30); do curl -sf http://localhost:8080/health >/dev/null && break; sleep 1; done
+          fail() { echo "::error::$1"; docker logs svc; exit 1; }
+          curl -sf -X POST http://localhost:8080/api/generate -H 'content-type: application/json' \
+            -d '{"code":"graph TD; A-->B;","output":"png"}' -o out.png || fail "PNG request failed"
+          [ "$(head -c 4 out.png | od -An -tx1 | tr -d ' ')" = "89504e47" ] || fail "PNG render returned non-PNG"
+          curl -sf -X POST http://localhost:8080/api/generate -H 'content-type: application/json' \
+            -d '{"code":"graph TD; A-->B;","output":"svg"}' -o out.svg || fail "SVG request failed"
+          grep -q '<SireniaSource>' out.svg || fail "SVG missing provenance metadata"
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/api/generate \
+            -H 'content-type: application/json' -d '{"code":"<b>x</b>","type":"html"}')
+          [ "$code" = "403" ] || fail "expected 403 for html render, got $code"
+          echo "Backend smoke test passed (PNG + SVG render, html render refused)."
+      # Security invariants, proven against the image that would ship: strict Mermaid, CORS deny,
+      # input limits, and no outbound request from the renderer. The script listens on the runner
+      # and submits diagrams that point at it; --control-cmd proves the container can reach that
+      # listener, so "no request arrived" means "blocked", not "unreachable".
+      - name: Security invariants (built backend image)
+        if: matrix.service == 'backend'
+        run: |
+          fetch_from() { echo "docker exec $1 node -e \"fetch(process.argv[1]).then(()=>process.exit(0),()=>process.exit(1))\""; }
+          # Two literal alternatives, not a variable: the static scan reads the hosted edition's command
+          # (--pack-icon gcp:cloud-run) from this file, and that command stays exactly as it was. The
+          # public copy has no committed pack; the container was started with the fixture packs
+          # (previous step), whose icon demo:square exercises the same pack checks.
+          if [ -f backend/cloudbuild.yaml ]; then
+            node scripts/security/verify-invariants.mjs render http://localhost:8080 --pack-icon gcp:cloud-run \
+              --canary-host host.docker.internal --control-cmd "$(fetch_from svc)" || { docker logs svc; exit 1; }
+          else
+            node scripts/security/verify-invariants.mjs render http://localhost:8080 --pack-icon demo:square \
+              --canary-host host.docker.internal --control-cmd "$(fetch_from svc)" || { docker logs svc; exit 1; }
+          fi
+          # Same image with arbitrary-HTML rendering switched on: egress must still be blocked.
+          docker run -d --name svc-html --add-host=host.docker.internal:host-gateway -p 8081:8080 \
+            -e ALLOW_HTML_RENDER=true "local/backend:${{ github.sha }}"
+          for i in $(seq 1 30); do curl -sf http://localhost:8081/health >/dev/null && break; sleep 1; done
+          node scripts/security/verify-invariants.mjs render http://localhost:8081 --html-mode \
+            --canary-host host.docker.internal --control-cmd "$(fetch_from svc-html)" || { docker logs svc-html; exit 1; }
+      - name: Smoke test frontend image
+        if: matrix.service == 'frontend'
+        run: |
+          # The proxy has no built-in backend URL: without BACKEND_URL it must refuse to start.
+          if docker run --rm "local/frontend:${{ github.sha }}" >/dev/null 2>&1; then echo "::error::proxy started without BACKEND_URL"; exit 1; fi
+          docker run -d --name svc -p 8080:8080 -e RATE_LIMIT_PER_MIN=3 -e BACKEND_URL=https://backend.invalid "local/frontend:${{ github.sha }}"
+          for i in $(seq 1 30); do curl -sf http://localhost:8080/health >/dev/null && break; sleep 1; done
+          fail() { echo "::error::$1"; docker logs svc; exit 1; }
+          hdrs=$(curl -sS -D - -o /dev/null http://localhost:8080/) || fail "GET / failed"
+          curl -sS http://localhost:8080/ | grep -q '<title>Sirenia</title>' || fail "default build is not named Sirenia"
+          if [ -f backend/cloudbuild.yaml ]; then
+            # The hosted edition ships the Google Cloud pack: the editor must be served its index and notice.
+            curl -sS http://localhost:8080/packs/index.json | grep -q 'trademarks of Google LLC' || fail "image does not serve the Google Cloud pack notice"
+            curl -sSf -o /dev/null http://localhost:8080/packs/gcp.json || fail "image does not serve the Google Cloud pack"
+          else
+            # The public copy ships no pack: the index is the empty list.
+            curl -sSf http://localhost:8080/packs/index.json | jq -e '.packs == []' >/dev/null || fail "/packs/index.json is not an empty list"
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/packs/nope.json)
+          [ "$code" = "404" ] || fail "expected 404 for a pack that is not installed, got $code"
+          echo "$hdrs" | grep -qi '^content-security-policy:' || fail "missing Content-Security-Policy header"
+          if echo "$hdrs" | grep -qi '^x-powered-by:'; then fail "x-powered-by header exposed"; fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/api/test)
+          [ "$code" = "404" ] || fail "expected 404 for /api/test, got $code"
+          # The policy allows no other origin: no scheme-wide source (https:) in any directive.
+          if echo "$hdrs" | grep -i '^content-security-policy:' | grep -q 'https:'; then fail "Content-Security-Policy allows other origins"; fi
+          # Errors raised before a route answers are JSON too (here: a body that is not valid JSON).
+          bad=$(curl -s -o bad.json -w '%{http_code} %{content_type}' -X POST http://localhost:8080/api/generate \
+            -H 'content-type: application/json' -d '{"code":')
+          case "$bad" in "400 application/json"*) ;; *) fail "expected a JSON 400 for a malformed body, got $bad" ;; esac
+          # Per-client rate limit (3/min in this test): requests 1-3 are counted (they fail upstream
+          # here, with no metadata server), the 4th must be refused with 429 before reaching upstream.
+          for i in 1 2 3; do curl -s -o /dev/null -X POST http://localhost:8080/api/generate \
+            -H 'content-type: application/json' -d '{"code":"graph TD;A-->B"}'; done
+          rl=$(curl -s -D - -o /dev/null -X POST http://localhost:8080/api/generate \
+            -H 'content-type: application/json' -d '{"code":"graph TD;A-->B"}')
+          echo "$rl" | head -1 | grep -q ' 429' || fail "expected 429 after the per-client limit"
+          echo "$rl" | grep -qi '^ratelimit-policy:' || fail "missing RateLimit-Policy header"
+          echo "Frontend smoke test passed (CSP present, no x-powered-by, debug route gone, per-client limit enforced)."
+      # Enforcing: the hardened images scanned clean (0 fixable HIGH/CRITICAL), and the Dockerfiles
+      # apply Debian fixes at build time, so a failure here means a fix exists that we haven't taken.
+      - name: Trivy scan (fixable HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: local/${{ matrix.service }}:${{ github.sha }}
+          format: table
+          output: trivy-${{ matrix.service }}.txt
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      # Print to the job log too: step summaries are not exposed by the REST API, logs are.
+      - name: Publish scan results (log + job summary)
+        if: always()
+        run: |
+          REPORT="trivy-${{ matrix.service }}.txt"
+          [ -f "$REPORT" ] || echo "No report produced (see the build/scan step logs)." > "$REPORT"
+          cat "$REPORT"
+          {
+            echo "### Trivy: ${{ matrix.service }} image (fixable HIGH/CRITICAL)"
+            echo '```'
+            cat "$REPORT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # The image for local use (root Dockerfile): editor and render service in one container, packs in
+  # a volume. Built natively on both architectures it is published for, then run the way a person
+  # runs it (docker run with a named volume on /packs) and exercised only through port 8080.
+  local-image:
+    name: Local image (build, smoke test, scan)
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    env:
+      IMAGE: local/sirenia:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Launcher unit tests
+        run: node --test docker/entrypoint.test.mjs
+      # Hosted edition: the image that is tested is the one the public copy produces, so build the
+      # export first and build from it. Public copy: there is nothing to export; build from the checkout.
+      - name: Build the public export
+        if: hashFiles('backend/cloudbuild.yaml') != ''
+        run: |
+          node scripts/oss/export.mjs build "$RUNNER_TEMP/public"
+          echo "BUILD_CONTEXT=$RUNNER_TEMP/public" >> "$GITHUB_ENV"
+      - name: Build
+        run: docker build -t "$IMAGE" "${BUILD_CONTEXT:-.}"
+      - name: No vendor artwork, size
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          # As root, so that no directory is unreadable; -xdev stays on the image's own filesystem
+          # (not /proc, /sys or the empty /packs volume).
+          found=$(docker run --rm --user 0 --entrypoint find "$IMAGE" / -xdev \( -name gcp.json -o -path '/app/*/packs/*.json' \) -print)
+          [ -z "$found" ] || fail "vendor pack files in the image: $found"
+          docker run --rm --entrypoint sh "$IMAGE" -c 'test ! -e /app/frontend/dist/packs' || fail "the editor build ships dist/packs"
+          echo "Image size: $(docker image inspect -f '{{.Size}}' "$IMAGE" | awk '{printf "%.0f MB", $1/1000000}')"
+      - name: Runs as a non-root user
+        run: |
+          uid=$(docker run --rm --entrypoint id "$IMAGE" -u)
+          [ "$uid" != "0" ] || { echo "::error::the container runs as root"; exit 1; }
+          echo "Effective uid: $uid"
+      - name: Start with an empty packs volume
+        run: |
+          docker volume create sirenia-packs
+          docker run -d --name sirenia -p 8080:8080 -v sirenia-packs:/packs "$IMAGE"
+      - name: Smoke test through port 8080 (no packs installed)
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          wait_up() { for i in $(seq 1 240); do curl -sf http://localhost:8080/health >/dev/null && return 0; sleep 1; done; return 1; }
+          wait_up || fail "port 8080 did not answer /health within 240 s"
+          hdrs=$(curl -sS -D - -o /dev/null http://localhost:8080/) || fail "GET / failed"
+          curl -sS http://localhost:8080/ | grep -q '<title>Sirenia</title>' || fail "the editor is not named Sirenia"
+          echo "$hdrs" | grep -qi '^content-security-policy:' || fail "missing Content-Security-Policy header"
+          curl -sSf http://localhost:8080/packs/index.json | jq -e '.packs == []' >/dev/null || fail "/packs/index.json is not an empty list"
+          curl -sf -X POST http://localhost:8080/api/generate -H 'content-type: application/json' \
+            -d '{"code":"graph TD; A-->B;","output":"png"}' -o out.png || fail "PNG request failed"
+          [ "$(head -c 4 out.png | od -An -tx1 | tr -d ' ')" = "89504e47" ] || fail "PNG render returned non-PNG"
+          curl -sf -X POST http://localhost:8080/api/generate -H 'content-type: application/json' \
+            -d '{"code":"graph TD; A-->B;","output":"svg"}' -o out.svg || fail "SVG request failed"
+          grep -q '<SireniaSource>' out.svg || fail "SVG missing provenance metadata"
+          # Only 8080 is published, so the render service's port must not answer from the runner.
+          if curl -s --max-time 3 -o /dev/null http://localhost:8081/health; then fail "the render service port answers from the runner"; fi
+          # Inside the container: 8081 accepts connections on 127.0.0.1 but not on the container's own
+          # network address, i.e. the render service is bound to loopback only.
+          docker exec sirenia node -e '
+            const net = require("node:net");
+            const ip = Object.values(require("node:os").networkInterfaces()).flat().find((i) => i.family === "IPv4" && !i.internal).address;
+            const open = (host) => new Promise((r) => { const s = net.connect(8081, host); s.on("connect", () => { s.destroy(); r(true); }); s.on("error", () => r(false)); });
+            Promise.all([open("127.0.0.1"), open(ip)]).then(([lo, ext]) => { console.log(`8081 on 127.0.0.1: ${lo}, on ${ip}: ${ext}`); process.exit(lo && !ext ? 0 : 1); });
+          ' || fail "the render service is not bound to loopback only"
+          code=$(curl -s -o missing.json -w '%{http_code}' -X POST http://localhost:8080/api/generate -H 'content-type: application/json' \
+            -d '{"code":"architecture-beta\n  service a(gcp:cloud-run)[Run]","output":"svg"}')
+          [ "$code" = "400" ] && jq -e '.code == "icon_pack_missing"' missing.json >/dev/null \
+            || fail "a gcp: diagram without the pack: expected 400 icon_pack_missing, got $code $(cat missing.json)"
+          echo "Smoke test passed (editor, CSP, empty pack index, PNG + SVG render, loopback-only render service, missing-pack answer)."
+      - name: Install, use and remove the Google Cloud pack
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          wait_up() { for i in $(seq 1 240); do curl -sf http://localhost:8080/health >/dev/null && return 0; sleep 1; done; return 1; }
+          packs() { docker run --rm -v sirenia-packs:/packs "$IMAGE" packs "$@"; }
+          in_volume() { docker run --rm -v sirenia-packs:/packs --entrypoint find "$IMAGE" /packs -mindepth 1; }
+          pack_svg() {
+            curl -s -o pack.svg -w '%{http_code}' -X POST http://localhost:8080/api/generate -H 'content-type: application/json' \
+              -d '{"code":"architecture-beta\n  service a(gcp:cloud-run)[Run]","output":"svg"}'
+          }
+          # Without acceptance (no terminal, no --accept-terms): exit 2 and nothing written.
+          set +e; packs add gcp; status=$?; set -e
+          [ "$status" = "2" ] || fail "packs add gcp without acceptance: expected exit 2, got $status"
+          [ -z "$(in_volume)" ] || fail "packs add without acceptance wrote to the volume: $(in_volume)"
+          # Downloads Google's ZIPs (SHA-256 pinned), as the weekly workflow does.
+          packs add gcp --accept-terms || fail "packs add gcp --accept-terms failed"
+          docker restart sirenia
+          wait_up || fail "port 8080 did not answer after the restart"
+          curl -sSf http://localhost:8080/packs/index.json | jq -e '[.packs[].prefix] == ["gcp"]' >/dev/null || fail "/packs/index.json does not list gcp"
+          code=$(pack_svg)
+          [ "$code" = "200" ] || fail "gcp: diagram with the pack installed: expected 200, got $code $(cat pack.svg)"
+          [ "$(grep -o '<Disclaimer>' pack.svg | wc -l | tr -d ' ')" = "1" ] || fail "expected exactly one <Disclaimer> in the export"
+          grep -o '<Disclaimer>[^<]*</Disclaimer>' pack.svg | grep -q 'Generated with Sirenia' || fail "the notice does not name Sirenia"
+          packs list | grep -Eq '^  gcp +' || fail "packs list does not show gcp"
+          packs remove gcp || fail "packs remove gcp failed"
+          docker restart sirenia
+          wait_up || fail "port 8080 did not answer after the second restart"
+          code=$(pack_svg)
+          [ "$code" = "400" ] && jq -e '.code == "icon_pack_missing"' pack.svg >/dev/null \
+            || fail "after packs remove: expected 400 icon_pack_missing, got $code $(cat pack.svg)"
+          echo "Pack test passed (acceptance required, install, notice in export, list, remove)."
+      - name: Stops cleanly on docker stop
+        run: |
+          start=$(date +%s)
+          docker stop --time 20 sirenia
+          took=$(( $(date +%s) - start ))
+          status=$(docker inspect -f '{{.State.ExitCode}}' sirenia)
+          echo "docker stop took ${took} s; exit code ${status}"
+          [ "$took" -le 15 ] || { echo "::error::docker stop took ${took} s (more than 15 s)"; exit 1; }
+          case "$status" in 0|143) ;; *) echo "::error::exit code ${status} after docker stop (expected 0 or 143)"; exit 1 ;; esac
+      - name: Trivy scan (fixable HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: local/sirenia:${{ github.sha }}
+          format: table
+          output: trivy-local-image.txt
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Publish scan results (log + job summary)
+        if: always()
+        run: |
+          REPORT="trivy-local-image.txt"
+          [ -f "$REPORT" ] || echo "No report produced (see the build/scan step logs)." > "$REPORT"
+          cat "$REPORT"
+          {
+            echo "### Trivy: local image on ${{ matrix.runner }} (fixable HIGH/CRITICAL)"
+            echo '```'
+            cat "$REPORT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Container logs
+        if: failure()
+        run: docker logs sirenia || true
+
+  frontend-build:
+    name: Frontend typecheck + build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - working-directory: frontend
+        run: npm ci
+      # Unit tests for the proxy's upstream retry policy (node:test, no extra dependencies).
+      - working-directory: frontend
+        run: npm test
+      - working-directory: frontend
+        run: npm run build
+
+  backend-test:
+    name: Backend unit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      # Settings that must never drift: pinned actions, no :latest, strict Mermaid config, no keys.
+      - name: Security invariants (repository scan)
+        run: node scripts/security/verify-invariants.mjs static
+      # The packs command runs the Google Cloud generator, which needs the root devDependency fflate.
+      - name: Install root dependencies (generator and export tooling)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+      # The export tool's own tests run in the public-export job (scripts/oss/ is not in the public copy).
+      - name: Tests for the packs command
+        run: node --test scripts/packs.test.mjs
+      - working-directory: backend
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+          # The hosted edition ships the Google Cloud pack: its tests must run, not skip. The public copy
+          # has none (empty value: the tests skip). Read by backend/tests/gcp-pack.test.js as === '1'.
+          REQUIRE_GCP_PACK: ${{ hashFiles('backend/cloudbuild.yaml') != '' && '1' || '' }}
+        run: npm ci --omit=dev --ignore-scripts && npm test
+
+  # The public copy, built from this tree and tested on its own: it must pass its own export check
+  # (no private identifiers, no dangling links) and its tests, and must not contain what it cannot
+  # ship. Runs only in the hosted edition; the public copy has nothing to export, so there every step
+  # after the detection is skipped.
+  public-export:
+    name: Public export (build, check, test)
+    runs-on: ubuntu-24.04
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - id: edition
+        name: Detect the edition
+        run: |
+          if [ -f backend/cloudbuild.yaml ]; then
+            echo "hosted=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hosted=false" >> "$GITHUB_OUTPUT"
+            echo "Public copy: nothing to export."
+          fi
+      - if: steps.edition.outputs.hosted == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Export tool tests
+        if: steps.edition.outputs.hosted == 'true'
+        run: node --test scripts/oss/export.test.mjs
+      - name: Build the export
+        if: steps.edition.outputs.hosted == 'true'
+        run: node scripts/oss/export.mjs build "$RUNNER_TEMP/public"
+      - name: Check the export (forbidden content and paths, dangling links)
+        if: steps.edition.outputs.hosted == 'true'
+        run: node scripts/oss/export.mjs check "$RUNNER_TEMP/public"
+      - name: Security invariants (repository scan of the export)
+        if: steps.edition.outputs.hosted == 'true'
+        working-directory: ${{ runner.temp }}/public
+        run: |
+          # The scan reads the tracked files; the export is a plain directory, so make it a repository first
+          # (as the public repository is). Nothing is committed.
+          git init -q
+          git add -A
+          node scripts/security/verify-invariants.mjs static
+      - name: Backend tests (export)
+        if: steps.edition.outputs.hosted == 'true'
+        working-directory: ${{ runner.temp }}/public/backend
+        run: npm ci --omit=dev --ignore-scripts && npm test
+      - name: Frontend tests and build (export)
+        if: steps.edition.outputs.hosted == 'true'
+        working-directory: ${{ runner.temp }}/public/frontend
+        run: npm ci && npm test && npm run build
+      - name: Install root dependencies (export)
+        if: steps.edition.outputs.hosted == 'true'
+        working-directory: ${{ runner.temp }}/public
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Packs command and launcher tests (export)
+        if: steps.edition.outputs.hosted == 'true'
+        working-directory: ${{ runner.temp }}/public
+        run: node --test scripts/packs.test.mjs docker/entrypoint.test.mjs
+      # After the build and the tests, so that what they produced (frontend/dist) is covered too.
+      - name: The export has no vendor artwork and no deployment files
+        if: steps.edition.outputs.hosted == 'true'
+        working-directory: ${{ runner.temp }}/public
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          found=$(find . -name node_modules -prune -o \( -name gcp.json -o -name 'cloudbuild*.yaml' \) -print)
+          [ -z "$found" ] || fail "files that must not be in the export: $found"
+          # Directories named packs: the packs command's code and the test fixtures only.
+          other=$(find . -name node_modules -prune -o -type d -name packs -print | grep -vxF -e ./scripts/packs -e ./backend/tests/fixtures/packs || true)
+          [ -z "$other" ] || fail "unexpected packs directories in the export: $other"
+          unexpected=$(find ./backend/tests/fixtures/packs -type f ! -name '*.json' -print)
+          [ -z "$unexpected" ] || fail "the fixture packs directory holds more than fixture packs: $unexpected"
+          echo "Export content verified."

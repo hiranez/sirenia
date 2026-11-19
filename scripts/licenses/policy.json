@@ -1,0 +1,21 @@
+{
+  "comment": "Licences allowed in PRODUCTION dependency trees (what ships in the images). Permissive only: adding a copyleft or source-available licence here is a decision for the project owner, not a routine edit.",
+  "allow": [
+    "MIT",
+    "MIT-0",
+    "ISC",
+    "0BSD",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Apache-2.0",
+    "BlueOak-1.0.0",
+    "Unlicense",
+    "CC0-1.0"
+  ],
+  "overrides": {
+    "khroma": {
+      "license": "MIT",
+      "reason": "package.json has no licence field; the package ships an MIT licence file"
+    }
+  }
+}

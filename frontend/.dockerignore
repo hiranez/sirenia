@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log*
+*.log
+.DS_Store
+.git
+.gitignore
+dist
+.env
+.env.*
+# Dead config: prod serves via the Node auth-proxy, not nginx.
+nginx.conf
+README.md

@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log*
+*.log
+.DS_Store
+.git
+.gitignore
+.dockerignore
+Dockerfile
+# Local test scaffolding and logs — not needed in the runtime image.
+server.log
+tests
+*.md
+.env
+.env.*

@@ -1,0 +1,502 @@
+:root {
+  font-family: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: radial-gradient(circle at 20% 20%, rgba(100, 108, 255, 0.18), transparent 35%),
+    radial-gradient(circle at 80% 0%, rgba(16, 185, 129, 0.18), transparent 30%),
+    #0f172a;
+}
+
+.app-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Editor Layout */
+.editor-container {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+}
+
+.sidebar {
+  width: 40%;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.92);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(148, 163, 184, 0.2);
+  box-sizing: border-box;
+  gap: 16px;
+}
+
+.brand-block h1 {
+  margin: 0 0 8px 0;
+  color: #e0e7ff;
+  font-size: 24px;
+}
+
+.tagline {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 14px;
+}
+
+/* Info Section */
+.info-section {
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 8px 0;
+}
+
+.info-header {
+  font-weight: 700;
+  font-size: 14px;
+  color: #a5b4fc;
+  margin-bottom: 10px;
+}
+
+.info-list {
+  margin: 0 0 12px 0;
+  padding-left: 20px;
+  color: #cbd5e1;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.info-list li {
+  margin-bottom: 4px;
+}
+
+.info-list strong {
+  color: #e0e7ff;
+}
+
+.info-warning {
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 13px;
+  color: #fde68a;
+  line-height: 1.5;
+}
+
+.info-warning strong {
+  color: #fcd34d;
+}
+
+.info-warning em {
+  color: #fef3c7;
+  font-style: italic;
+}
+
+.control-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-label {
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.control-group {
+  display: flex;
+  gap: 8px;
+}
+
+.radio-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  font-size: 13px;
+  cursor: pointer;
+  color: #e2e8f0;
+}
+
+.radio-pill input {
+  accent-color: #6366f1;
+}
+
+.preview-pane {
+  flex: 1;
+  padding: 20px;
+  background: #f8fafc;
+  color: #000;
+  overflow: auto;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  box-sizing: border-box;
+}
+
+.preview-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+  color: #000;
+}
+
+.preview-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f1f5f9;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.zoom-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zoom-btn:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.zoom-btn:active {
+  transform: scale(0.95);
+}
+
+.zoom-btn.reset {
+  font-size: 14px;
+  min-width: 36px;
+}
+
+.zoom-display {
+  min-width: 50px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.preview-info {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.code-editor {
+  flex: 1;
+  background: #0b1223;
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  padding: 14px;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  resize: none;
+  border-radius: 10px;
+  font-size: 14px;
+  min-height: 280px;
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.08);
+}
+
+.action-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.download-btn {
+  padding: 12px 18px;
+  background: linear-gradient(120deg, #6366f1, #10b981);
+  color: #0b1223;
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  border-radius: 10px;
+  font-size: 15px;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  min-width: 190px;
+}
+
+.download-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(99, 102, 241, 0.24);
+}
+
+.download-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.upload-btn {
+  position: relative;
+  padding: 12px 16px;
+  border: 1px dashed rgba(148, 163, 184, 0.6);
+  border-radius: 10px;
+  color: #e2e8f0;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.03);
+  font-weight: 600;
+  min-width: 200px;
+  text-align: center;
+}
+
+.upload-btn input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.error-box {
+  margin-top: 8px;
+  color: #fecdd3;
+  background: rgba(248, 113, 113, 0.08);
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+}
+
+/* Export progress: shown while the server renders, which takes longer when it has to start first. */
+.export-status {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.export-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+  overflow: hidden;
+}
+
+.export-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6366f1, #10b981);
+  background-size: 200% 100%;
+  transition: width 0.3s ease-out;
+  animation: export-sheen 2.4s linear infinite;
+}
+
+@keyframes export-sheen {
+  from { background-position: 200% 0; }
+  to { background-position: 0 0; }
+}
+
+.export-message {
+  margin: 8px 0 0 0;
+  line-height: 1.4;
+}
+
+.export-done {
+  color: #a7f3d0;
+}
+
+.export-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.retry-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(254, 205, 211, 0.6);
+  background: transparent;
+  color: #fecdd3;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.retry-btn:hover {
+  background: rgba(248, 113, 113, 0.14);
+}
+
+.export-reference {
+  flex-basis: 100%;
+  font-size: 12px;
+  opacity: 0.75;
+  word-break: break-all;
+}
+
+.engine-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.engine-hint.ready {
+  color: #6ee7b7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .export-progress-fill {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* Example Buttons */
+.example-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.example-btn {
+  padding: 8px 14px;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 8px;
+  color: #a5b4fc;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 600;
+}
+
+.example-btn:hover {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.5);
+  color: #c7d2fe;
+  transform: translateY(-1px);
+}
+
+.example-btn:active {
+  transform: translateY(0);
+}
+
+/* Terms of Service Footer */
+.tos-footer {
+  margin-top: 16px;
+  padding: 12px;
+  background: rgba(51, 65, 85, 0.4);
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.tos-footer p {
+  margin: 0 0 6px 0;
+}
+
+.tos-footer p:last-child {
+  margin-bottom: 0;
+}
+
+.tos-footer strong {
+  color: #cbd5e1;
+}
+
+.tos-privacy {
+  color: #86efac;
+  font-size: 11px;
+}
+
+/* Ensure diagrams render at natural size and are readable */
+.mermaid-preview {
+  display: inline-block;
+  padding: 0;
+  background: white;
+}
+
+.mermaid-preview svg {
+  display: block;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  /* SVG will auto-size based on viewBox and width/height attributes */
+  width: auto !important;
+  height: auto !important;
+}
+
+/* SVG text styling - wrapping handled by tspan elements from JavaScript */
+.mermaid-preview svg text {
+  overflow: visible !important;
+  font-size: 14px !important;
+  font-family: Arial, sans-serif !important;
+}
+
+.mermaid-preview svg tspan {
+  overflow: visible !important;
+  font-size: inherit !important;
+}
+
+/* Allow all SVG elements to expand to fit content */
+.mermaid-preview svg * {
+  overflow: visible !important;
+}
+
+/* Specific rules for flowchart nodes to prevent text clipping */
+.mermaid-preview svg .flowchart-v2 .nodeLabel,
+.mermaid-preview svg .flowchart .nodeLabel,
+.mermaid-preview svg .node text {
+  text-anchor: middle;
+  overflow: visible !important;
+  dominant-baseline: middle;
+}
+
+/* Class diagram text wrapping */
+.mermaid-preview svg .classBox text,
+.mermaid-preview svg .classBox tspan {
+  overflow: visible !important;
+}
+
+/* Hide Mermaid error messages at bottom of page */
+.mermaid svg.error-container,
+#error-container,
+.mermaid-error-container {
+  display: none !important;
+}
+
+/* Hide error text elements that Mermaid renders */
+svg text[font-size="16"][fill="#ff0000"],
+text.error-text,
+g.error-message {
+  display: none !important;
+}
+
+/* Hide error SVGs completely */
+svg[data-error="true"],
+svg.error {
+  display: none !important;
+}
+

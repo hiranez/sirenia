@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Production
+dist/
+build/
+
+# Misc
+.DS_Store
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.npmrc
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+# NOTE: .dockerignore MUST be committed — it shapes the Cloud Build image context.
+# (Previously ignored here, which meant CI built with no .dockerignore and COPY . . pulled
+#  in .git/node_modules/logs/Docs.)
+
+# AI Agent Instructions (not for version control)
+full-stack-developer-ai-agent.prompt.md
+copilot-instructions.md
+
+# Documentation generation files (local only)
+Docs/created_files_report.md
+Docs/project_code_report.md
+Docs/project_report.md
+
+# Root-level documentation (moved to Docs/ subfolder)
+# These should be deleted and only exist in Docs/deployment/ or Docs/guides/
+/DEPLOYMENT.md
+/DEPLOYMENT_CHECKLIST.md
+/DEPLOY_COMMANDS.sh
+
+# Generator download cache (scripts/build-gcp-icon-pack.mjs)
+.cache/

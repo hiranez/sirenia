@@ -1,0 +1,24 @@
+{
+  "prefix": "demo",
+  "sirenia": {
+    "format": 1,
+    "label": "Demo shapes",
+    "owner": "Example Corp",
+    "termsUrl": "https://example.com/terms",
+    "notice": {
+      "editor": "Demo shapes are test artwork of Example Corp, used here only in tests.",
+      "export": "Demo shapes are test artwork of Example Corp, used only to test this diagram."
+    }
+  },
+  "info": { "name": "Demo shapes (test fixture)", "total": 3, "license": { "title": "Apache-2.0" } },
+  "width": 24,
+  "height": 24,
+  "icons": {
+    "circle": { "body": "<circle cx=\"12\" cy=\"12\" r=\"9\" fill=\"#2e7d32\"/>" },
+    "square": { "body": "<rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" fill=\"#1565c0\"/>" },
+    "triangle": { "body": "<path d=\"M12 3 L21 21 L3 21 Z\" fill=\"#ef6c00\"/>" }
+  },
+  "aliases": {
+    "box": { "parent": "square" }
+  }
+}

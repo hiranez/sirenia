@@ -22,7 +22,7 @@ Sirenia is an independent project. It uses Mermaid and is not affiliated with or
 You need Docker.
 
 ```bash
-docker run --rm -p 8080:8080 -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.2.0
+docker run --rm -p 8080:8080 -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.3.0
 ```
 
 Open <http://localhost:8080>.
@@ -55,7 +55,7 @@ docker run --rm -it -v sirenia-packs:/packs sirenia packs list
 docker run --rm -it -v sirenia-packs:/packs sirenia packs add gcp
 ```
 
-These commands use the name of an image you built yourself; with the published image, write `ghcr.io/hiranez/sirenia:1.2.0` in place of `sirenia`.
+These commands use the name of an image you built yourself; with the published image, write `ghcr.io/hiranez/sirenia:1.3.0` in place of `sirenia`.
 
 `packs add` prints the vendor's terms and asks you to accept them before it downloads anything. It then verifies each download against a pinned SHA-256 checksum and stops on a mismatch. Restart the server afterwards so it loads the pack.
 

@@ -26,6 +26,9 @@ concurrency:
 jobs:
   image:
     name: Build, test and push (${{ matrix.arch }})
+    # Editions built from this repository carry this file and have version tags of their own: only
+    # this repository publishes the image and the release.
+    if: github.repository == 'hiranez/sirenia'
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read

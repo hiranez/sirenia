@@ -6,12 +6,10 @@ name: security
 # Every action is pinned to a full commit SHA (release tag in the trailing comment).
 # Tags are mutable and third-party action tags have been hijacked before; SHAs are not.
 #
-# This file runs unchanged in two trees: the hosted edition (which has backend/cloudbuild.yaml and
-# commits the Google Cloud icon pack) and its public export (which has neither). The presence of
-# backend/cloudbuild.yaml is the marker of the hosted edition; the pack file is deliberately not the
-# marker, so that deleting the pack from the hosted tree fails CI instead of switching its checks off.
-# The `public-export` job builds the public copy from the hosted tree and tests it on its own; in
-# the public copy itself it does nothing.
+# This file runs unchanged in two trees: this repository, and a hosted edition built from it (which
+# adds backend/cloudbuild.yaml and commits an icon pack). The presence of backend/cloudbuild.yaml is
+# the marker of a hosted edition; the pack file is deliberately not the marker, so that deleting the
+# pack from a hosted tree fails CI instead of switching its checks off.
 on:
   push:
     branches: [main]
@@ -199,15 +197,10 @@ jobs:
           node-version: '22'
       - name: Launcher unit tests
         run: node --test docker/entrypoint.test.mjs
-      # Hosted edition: the image that is tested is the one the public copy produces, so build the
-      # export first and build from it. Public copy: there is nothing to export; build from the checkout.
-      - name: Build the public export
-        if: hashFiles('backend/cloudbuild.yaml') != ''
-        run: |
-          node scripts/oss/export.mjs build "$RUNNER_TEMP/public"
-          echo "BUILD_CONTEXT=$RUNNER_TEMP/public" >> "$GITHUB_ENV"
+      # The root .dockerignore is an allow-list that keeps icon packs out of the build context, so a
+      # hosted edition's tree builds the same image as this repository.
       - name: Build
-        run: docker build -t "$IMAGE" "${BUILD_CONTEXT:-.}"
+        run: docker build -t "$IMAGE" .
       - name: No vendor artwork, size
         run: |
           fail() { echo "::error::$1"; exit 1; }
@@ -352,12 +345,24 @@ jobs:
       # Settings that must never drift: pinned actions, no :latest, strict Mermaid config, no keys.
       - name: Security invariants (repository scan)
         run: node scripts/security/verify-invariants.mjs static
+      # This repository ships recipes, not artwork, and no deployment files. A hosted edition adds both.
+      - name: No vendor artwork and no deployment files in the repository
+        if: hashFiles('backend/cloudbuild.yaml') == ''
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          found=$(git ls-files | grep -E '(^|/)(gcp\.json|cloudbuild[^/]*\.yaml)$' || true)
+          [ -z "$found" ] || fail "files that must not be in this repository: $found"
+          # Directories named packs: the packs command's code and the test fixtures only.
+          other=$(git ls-files | grep -E '(^|/)packs/' | grep -vE '^(scripts/packs|backend/tests/fixtures/packs)/' || true)
+          [ -z "$other" ] || fail "unexpected files under a packs directory: $other"
+          unexpected=$(git ls-files backend/tests/fixtures/packs | grep -v '\.json$' || true)
+          [ -z "$unexpected" ] || fail "the fixture packs directory holds more than fixture packs: $unexpected"
+          echo "Repository content verified."
       # The packs command runs the Google Cloud generator, which needs the root devDependency fflate.
-      - name: Install root dependencies (generator and export tooling)
+      - name: Install root dependencies (pack generator)
         run: npm ci --ignore-scripts --no-audit --no-fund
         env:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
-      # The export tool's own tests run in the public-export job (scripts/oss/ is not in the public copy).
       - name: Tests for the packs command
         run: node --test scripts/packs.test.mjs
       - working-directory: backend
@@ -367,78 +372,3 @@ jobs:
           # has none (empty value: the tests skip). Read by backend/tests/gcp-pack.test.js as === '1'.
           REQUIRE_GCP_PACK: ${{ hashFiles('backend/cloudbuild.yaml') != '' && '1' || '' }}
         run: npm ci --omit=dev --ignore-scripts && npm test
-
-  # The public copy, built from this tree and tested on its own: it must pass its own export check
-  # (no private identifiers, no dangling links) and its tests, and must not contain what it cannot
-  # ship. Runs only in the hosted edition; the public copy has nothing to export, so there every step
-  # after the detection is skipped.
-  public-export:
-    name: Public export (build, check, test)
-    runs-on: ubuntu-24.04
-    env:
-      PUPPETEER_SKIP_DOWNLOAD: 'true'
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
-      - id: edition
-        name: Detect the edition
-        run: |
-          if [ -f backend/cloudbuild.yaml ]; then
-            echo "hosted=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "hosted=false" >> "$GITHUB_OUTPUT"
-            echo "Public copy: nothing to export."
-          fi
-      - if: steps.edition.outputs.hosted == 'true'
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: '22'
-      - name: Export tool tests
-        if: steps.edition.outputs.hosted == 'true'
-        run: node --test scripts/oss/export.test.mjs
-      - name: Build the export
-        if: steps.edition.outputs.hosted == 'true'
-        run: node scripts/oss/export.mjs build "$RUNNER_TEMP/public"
-      - name: Check the export (forbidden content and paths, dangling links)
-        if: steps.edition.outputs.hosted == 'true'
-        run: node scripts/oss/export.mjs check "$RUNNER_TEMP/public"
-      - name: Security invariants (repository scan of the export)
-        if: steps.edition.outputs.hosted == 'true'
-        working-directory: ${{ runner.temp }}/public
-        run: |
-          # The scan reads the tracked files; the export is a plain directory, so make it a repository first
-          # (as the public repository is). Nothing is committed.
-          git init -q
-          git add -A
-          node scripts/security/verify-invariants.mjs static
-      - name: Backend tests (export)
-        if: steps.edition.outputs.hosted == 'true'
-        working-directory: ${{ runner.temp }}/public/backend
-        run: npm ci --omit=dev --ignore-scripts && npm test
-      - name: Frontend tests and build (export)
-        if: steps.edition.outputs.hosted == 'true'
-        working-directory: ${{ runner.temp }}/public/frontend
-        run: npm ci && npm test && npm run build
-      - name: Install root dependencies (export)
-        if: steps.edition.outputs.hosted == 'true'
-        working-directory: ${{ runner.temp }}/public
-        run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Packs command and launcher tests (export)
-        if: steps.edition.outputs.hosted == 'true'
-        working-directory: ${{ runner.temp }}/public
-        run: node --test scripts/packs.test.mjs docker/entrypoint.test.mjs
-      # After the build and the tests, so that what they produced (frontend/dist) is covered too.
-      - name: The export has no vendor artwork and no deployment files
-        if: steps.edition.outputs.hosted == 'true'
-        working-directory: ${{ runner.temp }}/public
-        run: |
-          fail() { echo "::error::$1"; exit 1; }
-          found=$(find . -name node_modules -prune -o \( -name gcp.json -o -name 'cloudbuild*.yaml' \) -print)
-          [ -z "$found" ] || fail "files that must not be in the export: $found"
-          # Directories named packs: the packs command's code and the test fixtures only.
-          other=$(find . -name node_modules -prune -o -type d -name packs -print | grep -vxF -e ./scripts/packs -e ./backend/tests/fixtures/packs || true)
-          [ -z "$other" ] || fail "unexpected packs directories in the export: $other"
-          unexpected=$(find ./backend/tests/fixtures/packs -type f ! -name '*.json' -print)
-          [ -z "$unexpected" ] || fail "the fixture packs directory holds more than fixture packs: $unexpected"
-          echo "Export content verified."

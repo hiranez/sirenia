@@ -11,6 +11,9 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 ### Changed
 
 - README: the quick start runs the published image; building from source is described after it.
+- This repository is now where Sirenia is developed. Its CI no longer contains the steps that built it from another tree, and it checks on its own that it holds no vendor artwork and no deployment files.
+- The release workflow publishes only from this repository, so an edition that carries the file does not publish an image by tagging a version.
+- The repository scan fails when documentation names the published image at a version other than the one in `package.json`.
 
 ## [1.2.0] - 2026-11-19
 

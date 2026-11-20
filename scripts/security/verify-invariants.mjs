@@ -234,6 +234,18 @@ function runStatic() {
   check('LICENSE is the unmodified Apache License 2.0 text', licenceHash === APACHE_2_SHA256, `sha256 ${licenceHash}`);
   const undeclared = ['package.json', 'backend/package.json', 'frontend/package.json'].filter((f) => JSON.parse(read(f)).license !== 'Apache-2.0');
   check('Every package manifest declares Apache-2.0', undeclared.length === 0, undeclared.join(', '));
+  // Documentation names the published image with a version: it must be the current one, so that a
+  // version bump cannot leave the README behind. Changelogs name older versions on purpose.
+  const version = parsed('package.json')?.version;
+  const staleImages = [];
+  for (const f of files.filter((x) => /\.md$/i.test(x) && !/(^|\/)CHANGELOG\.md$/i.test(x) && fs.existsSync(path.join(ROOT, x)))) {
+    read(f).split('\n').forEach((line, i) => {
+      for (const m of line.matchAll(/ghcr\.io\/[a-z0-9._/-]+:(\d+\.\d+\.\d+)/g)) {
+        if (m[1] !== version) staleImages.push(`${f}:${i + 1} ${m[0]}`);
+      }
+    });
+  }
+  check(`Documentation names the published image at the current version (${version})`, Boolean(version) && staleImages.length === 0, staleImages.join(', '));
   const copyright = /^Copyright \d{4} Hiram Sanchez$/m;
   const uncredited = ['NOTICE.md', 'README.md'].filter((f) => !copyright.test(read(f)));
   check('Copyright line present in NOTICE.md and README', uncredited.length === 0, `missing in: ${uncredited.join(', ')}`);

@@ -242,6 +242,41 @@ check('the sirenia object is validated: shape, strings only, bounded, https term
   assert.doesNotThrow(() => loadPacks(packDir(s((m) => { m.notice.export = 'x'.repeat(1000); m.label = 'y'.repeat(80); })), 'T'));
 });
 
+check('sirenia.catalog is validated: shape, own icon or alias, unique, safe text, bounded', () => {
+  const c = (catalog) => edited((p) => { p.sirenia.catalog = catalog; });
+  const ok = [{ icon: 'square', name: 'Square', group: 'Shapes' }, { icon: 'box', name: 'Pub/Sub (Beta, etc.)' }];
+  assert.doesNotThrow(() => loadPacks(packDir(c(ok)), 'T'));
+  assert.doesNotThrow(() => loadPacks(packDir(c([])), 'T'));
+  // The catalog is not sent to Mermaid or to the render page.
+  assert.ok(!loadPacks(packDir(c(ok)), 'T').ICON_PACKS_SCRIPT.includes('Pub/Sub'));
+  rejects(c('x'), /"sirenia.catalog" must be an array/);
+  rejects(c({ icon: 'square', name: 'S' }), /"sirenia.catalog" must be an array/);
+  rejects(c(Array.from({ length: 5001 }, (_, i) => ({ icon: `i${i}`, name: 'x' }))), /at most 5000 entries/);
+  rejects(c(['square']), /entry 1 must be an object/);
+  rejects(c([null]), /entry 1 must be an object/);
+  rejects(c([[]]), /entry 1 must be an object/);
+  rejects(c([{ icon: 'square', name: 'S', extra: 1 }]), /entry 1 has unknown key "extra"/);
+  rejects(c([{ icon: 'nope', name: 'S' }]), /entry 1: "icon" must name an icon or alias of this pack/);
+  rejects(c([{ icon: 'toString', name: 'S' }]), /"icon" must name an icon or alias/);
+  rejects(c([{ icon: 'constructor', name: 'S' }]), /"icon" must name an icon or alias/);
+  rejects(c([{ name: 'S' }]), /"icon" must name an icon or alias/);
+  rejects(c([{ icon: 5, name: 'S' }]), /"icon" must name an icon or alias/);
+  rejects(c([{ icon: 'square', name: 'S' }, { icon: 'circle', name: 'C' }, { icon: 'square', name: 'T' }]), /entry 3: duplicate icon "square"/);
+  rejects(edited((p) => { p.icons.Odd_Name = p.icons.square; p.sirenia.catalog = [{ icon: 'Odd_Name', name: 'S' }]; }), /entry 1: icon "Odd_Name" must be lowercase letters, digits and single hyphens/);
+  rejects(c([{ icon: 'square' }]), /entry 1 \(icon "square"\) "name" must be a non-empty string/);
+  rejects(c([{ icon: 'square', name: ' ' }]), /"name" must be a non-empty string/);
+  rejects(c([{ icon: 'square', name: 'x'.repeat(81) }]), /"name" must be at most 80/);
+  rejects(c([{ icon: 'square', name: 'a\nb' }]), /"name" must not contain control characters/);
+  rejects(c([{ icon: 'square', name: 'S', group: '' }]), /"group" must be a non-empty string/);
+  rejects(c([{ icon: 'square', name: 'S', group: null }]), /"group" must be a non-empty string/);
+  rejects(c([{ icon: 'square', name: 'S', group: 'x'.repeat(81) }]), /"group" must be at most 80/);
+  for (const ch of ['[', ']', '{', '}', '<', '>', '"', '`', '\\', '|', '#', ';', '%']) {
+    rejects(c([{ icon: 'square', name: `a${ch}b` }]), /"name" must not contain any of/);
+    rejects(c([{ icon: 'square', name: 'S', group: `a${ch}b` }]), /"group" must not contain any of/);
+  }
+  assert.doesNotThrow(() => loadPacks(packDir(c([{ icon: 'square', name: 'x'.repeat(80), group: 'y'.repeat(80) }])), 'T'));
+});
+
 check('a plain Iconify pack without sirenia is valid and contributes no notice', () => {
   const api = loadPacks(packDir({ 'plain.json': fs.readFileSync(path.join(FIXTURES, 'plain.json'), 'utf8') }), 'Test');
   assert.deepStrictEqual(api.ICON_PACKS.map((p) => p.prefix), ['plain']);

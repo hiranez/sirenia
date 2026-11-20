@@ -21,9 +21,11 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile, access } from 'node:fs/promises';
 import { basename, dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { unzipSync, strFromU8 } from 'fflate';
 import { INDEX_FILE, buildPackIndex } from './packs/pack-index.mjs';
 
+const { checkCatalog } = createRequire(import.meta.url)('../backend/utils/packFile.js');
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
 const args = new Set(process.argv.slice(2));
@@ -195,10 +197,20 @@ for (const p of products) {
   if (LEGACY && p.legacy && !zips.legacy[`${p.legacy}/${p.legacy}.svg`]) fail(`product ${p.id}: legacy icon "${p.legacy}" not in legacy ZIP`);
 }
 
+// Picker catalog: official product names (one per product, plus the core icons no product names).
+// Category icons are not products and get no entry. Checked with the validator that rejects the pack
+// at install time, so a bad name fails here and not on the user's machine.
+const byText = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+const productIds = new Set(products.map((p) => p.id));
+const catalog = [
+  ...products.map((p) => ({ icon: p.id, name: p.name, group: p.category })),
+  ...baseIcons.filter((i) => i.kind === 'core' && !productIds.has(i.id)).map((i) => ({ icon: i.id, name: i.name })),
+].sort((a, b) => byText(a.name.toLowerCase(), b.name.toLowerCase()) || byText(a.icon, b.icon));
+
 const sortKeys = (o) => Object.fromEntries(Object.keys(o).sort().map((k) => [k, o[k]]));
 const pack = {
   prefix,
-  ...(SIRENIA ? { sirenia: SIRENIA } : {}),
+  ...(SIRENIA ? { sirenia: { ...SIRENIA, catalog } } : {}),
   info: {
     name: 'Google Cloud product icons',
     total: Object.keys(icons).length,
@@ -215,6 +227,12 @@ const pack = {
   icons: sortKeys(icons),
   aliases: sortKeys(aliases),
 };
+
+try {
+  checkCatalog(catalog, pack, (msg) => { throw new Error(msg); });
+} catch (e) {
+  fail(e.message);
+}
 
 const outputs = [{ path: OUTPUTS, json: `${JSON.stringify(pack)}\n`, pack }];
 

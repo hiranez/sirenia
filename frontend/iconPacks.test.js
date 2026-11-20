@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parsePackIndex, composeFooterNotice, iconifyPart, loadPackIndex, fetchPack, PACK_INDEX_URL } from './src/utils/iconPacks.ts';
+import { parsePackIndex, composeFooterNotice, iconifyPart, loadPackIndex, fetchPack, loadPackFile, PACK_INDEX_URL } from './src/utils/iconPacks.ts';
 
 const GOOGLE_EDITOR = 'Google Cloud and the Google Cloud product icons are trademarks of Google LLC, used here solely to depict Google Cloud products in architecture diagrams.';
 const GOOGLE_AFTER = 'Icons are used unmodified, as published by Google.';
@@ -132,4 +132,25 @@ test('fetchPack hands Mermaid the Iconify part only and rejects anything else', 
   await assert.rejects(fetchPack(entry, async () => json('<!doctype html>')));
   await assert.rejects(fetchPack(entry, async () => json({ ...pack, prefix: 'other' })), /not a valid pack/);
   assert.throws(() => iconifyPart({ prefix: 'gcp', icons: [] }, 'gcp'), /not a valid pack/);
+});
+
+test('loadPackFile: one download per page, shared with fetchPack; a failure is not cached', async () => {
+  const entry = gcpEntry();
+  const pack = { prefix: 'gcp', sirenia: { format: 1 }, icons: { a: { body: '<g/>' } } };
+  let calls = 0;
+  const fetchOnce = async () => { calls++; return json(pack); };
+  const [file, part] = await Promise.all([loadPackFile(entry, fetchOnce), fetchPack(entry, fetchOnce)]);
+  assert.deepEqual(file, pack);
+  assert.deepEqual(part, { prefix: 'gcp', icons: { a: { body: '<g/>' } } });
+  await loadPackFile(entry, fetchOnce);
+  assert.equal(calls, 1);
+
+  let attempts = 0;
+  const flaky = async () => { attempts++; return attempts === 1 ? json({ error: 'x' }, 503) : json(pack); };
+  await assert.rejects(loadPackFile(entry, flaky), /HTTP 503/);
+  assert.deepEqual(await loadPackFile(entry, flaky), pack);
+  assert.equal(attempts, 2);
+  const broken = async () => { throw new TypeError('Failed to fetch'); };
+  await assert.rejects(fetchPack(entry, broken));
+  await assert.rejects(fetchPack(entry, broken));
 });

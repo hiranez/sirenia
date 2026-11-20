@@ -4,6 +4,11 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- Icon picker: with a pack installed, "Insert icon..." in the editor opens a searchable list of the pack's icons by official product name, previews the selected one in a one-node diagram, and inserts it into an architecture or flowchart diagram at the cursor, or copies its `prefix:icon` name. The list is text only; icons appear only inside diagrams.
+- Optional `sirenia.catalog` key in pack files: an array of `{ icon, name, group }` entries naming the icons (at most 5000). The Google Cloud pack carries one. A pack without a catalog still works; the picker lists its icon names. A pack that contains a catalog is rejected by Sirenia 1.3.0 and older, whose validator refuses unknown `sirenia` keys: upgrade first, then reinstall packs, not the other way round.
+
 ## [1.3.0] - 2026-11-20
 
 ### Added

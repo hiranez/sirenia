@@ -19,6 +19,10 @@ pack is installed at run time (see Install).
 for the editor footer, `notice.export` for exports) is copied into the pack's `sirenia` object. After writing a
 pack the generator rebuilds `index.json` in that directory from every pack there; the editor reads it to find packs.
 
+The Google Cloud pack also carries `sirenia.catalog`, the list the editor's icon picker shows: one entry per product (`icon`, the
+official `name`, and its `group`), plus the core icons that no product names. The generator checks the catalog with the same
+validator that checks the pack at install time. The legacy pack has none.
+
 ## Install
 
 The open-source copy of this repository ships no Google artwork. Add the pack yourself:

@@ -4,6 +4,8 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-20
+
 ### Added
 
 - Branding key `basedOn` (a name and an https link): an edition built from Sirenia can name the project it is based on in the editor footer.

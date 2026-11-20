@@ -1,6 +1,6 @@
 {
   "name": "sirenia",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Sirenia: an editor and render service that turn Mermaid diagrams into self-contained SVG and PNG files.",
   "main": "index.js",
   "directories": {

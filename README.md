@@ -105,7 +105,7 @@ Set these as environment variables on the container.
 | `RATE_LIMIT_PER_MIN` | `20` | Render requests allowed for each client in a minute |
 | `PRODUCT_NAME` | `Sirenia` | Name written into the notice that travels with pack icons |
 
-The name and contact details shown in the editor are chosen when the editor is built, from a branding file (`frontend/branding/`, build argument `BRANDING_FILE`).
+The name and contact details shown in the editor are chosen when the editor is built, from a branding file (`frontend/branding/`, build argument `BRANDING_FILE`). An edition built from Sirenia can set `basedOn` (a name and an https link) in its branding file; the editor then says in its footer which project it is based on.
 
 ## How it is put together
 
@@ -150,7 +150,7 @@ Sirenia is built to render diagrams from people you do not fully trust, but it h
 
 ## Editions
 
-Sirenia is the open-source project. Clonix Secure Diagram Studio is a hosted edition operated by Clonix; it is built from Sirenia and bundles icon packs.
+Sirenia is the open-source project. Clonix Secure Diagram Studio is a hosted edition operated by Clonix; it is built from Sirenia, says so in its footer, and bundles icon packs.
 
 ## Trademarks
 

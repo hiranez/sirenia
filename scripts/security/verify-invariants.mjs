@@ -249,6 +249,13 @@ function runStatic() {
       fe.includes('BRANDING_FILE=branding/clonix.json') && fe.includes('BACKEND_URL=https://') && be.includes('PRODUCT_NAME=Clonix Secure Diagram Studio'),
       'frontend/cloudbuild.yaml needs BRANDING_FILE=branding/clonix.json and BACKEND_URL=https://...; backend/cloudbuild.yaml needs PRODUCT_NAME=Clonix Secure Diagram Studio'
     );
+    // Hiram's rule for the hosted edition: it says which open-source project it is built from.
+    const basedOn = parsed('frontend/branding/clonix.json')?.basedOn;
+    check(
+      'Clonix edition states that it is based on Sirenia',
+      basedOn?.name === 'Sirenia' && basedOn?.url === 'https://github.com/hiranez/sirenia' && read('frontend/src/components/DiagramEditor.tsx').includes('branding.basedOn.url'),
+      'frontend/branding/clonix.json needs basedOn { name: "Sirenia", url: "https://github.com/hiranez/sirenia" } and the editor footer must render it'
+    );
     // The hosted edition ships the Google Cloud pack in both images, and CI proves it renders.
     const packsMissing = ['backend/packs/gcp.json', 'frontend/public/packs/gcp.json'].filter((f) => !fs.existsSync(path.join(ROOT, f)));
     check('Clonix edition ships the Google Cloud icon pack in both images', packsMissing.length === 0, `missing: ${packsMissing.join(', ')}`);

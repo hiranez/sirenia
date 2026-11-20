@@ -692,6 +692,9 @@ const DiagramEditor: React.FC = () => {
                     {packNotices.map(({ prefix, text }) => (
                         <p key={prefix} className="tos-privacy">{text}</p>
                     ))}
+                    {branding.basedOn && (
+                        <p className="tos-privacy">{branding.productName} is based on <a href={branding.basedOn.url} target="_blank" rel="noopener noreferrer" style={{color: '#4A90E2'}}>{branding.basedOn.name}</a>, an open-source project under the Apache License 2.0.</p>
+                    )}
                 </div>
             </div>
             <div className="preview-container">

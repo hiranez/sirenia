@@ -7,12 +7,13 @@ interface Branding {
   productName: string
   contactEmail: string | null
   vendorName: string | null
+  basedOn: { name: string; url: string } | null
 }
 
 const NAME_MAX = 80
 const CONTROL_CHARS = /[\p{Cc}\p{Zl}\p{Zp}]/u
 const EMAIL_SHAPE = /^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+$/
-const KNOWN_KEYS = ['productName', 'contactEmail', 'vendorName']
+const KNOWN_KEYS = ['productName', 'contactEmail', 'vendorName', 'basedOn']
 
 function fail(file: string, message: string): never {
   throw new Error(`Invalid branding file ${file}: ${message}`)
@@ -23,6 +24,24 @@ function checkName(file: string, key: string, value: unknown): string {
   if (value.length > NAME_MAX) fail(file, `"${key}" must be at most ${NAME_MAX} characters`)
   if (CONTROL_CHARS.test(value)) fail(file, `"${key}" must not contain control characters`)
   return value
+}
+
+// The project an edition is built from: a name and an https link, shown in the page footer.
+function checkBasedOn(file: string, value: unknown): Branding['basedOn'] {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'object' || Array.isArray(value)) fail(file, '"basedOn" must be null or an object with "name" and "url"')
+  const obj = value as Record<string, unknown>
+  for (const key of Object.keys(obj)) {
+    if (key !== 'name' && key !== 'url') fail(file, `unknown key "basedOn.${key}" (allowed: name, url)`)
+  }
+  const name = checkName(file, 'basedOn.name', obj.name)
+  const url = obj.url
+  let parsed: URL | null = null
+  try { parsed = typeof url === 'string' && url.length <= 200 ? new URL(url) : null } catch { parsed = null }
+  if (!parsed || parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.href !== url) {
+    fail(file, '"basedOn.url" must be an https URL in its normal form, at most 200 characters, without credentials')
+  }
+  return { name, url: parsed.href }
 }
 
 function loadBranding(): Branding {
@@ -44,7 +63,7 @@ function loadBranding(): Branding {
     fail(file, '"contactEmail" must be null or an email address')
   }
   const vendorName = obj.vendorName === undefined || obj.vendorName === null ? null : checkName(file, 'vendorName', obj.vendorName)
-  return { productName, contactEmail, vendorName }
+  return { productName, contactEmail, vendorName, basedOn: checkBasedOn(file, obj.basedOn) }
 }
 
 const escapeHtml = (s: string) =>

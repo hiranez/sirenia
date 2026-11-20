@@ -1,5 +1,6 @@
 {
   "productName": "Sirenia",
   "contactEmail": null,
-  "vendorName": null
+  "vendorName": null,
+  "basedOn": null
 }

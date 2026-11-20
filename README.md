@@ -17,6 +17,8 @@ Sirenia is an independent project. It uses Mermaid and is not affiliated with or
 - **Icon packs are plug-ins.** Sirenia ships no vendor artwork. You add the packs you need, for example the official Google Cloud product icons, with one command that shows you the vendor's terms first.
 - **Editor and API.** Use the browser editor, or `POST /api/generate` from a script or a pipeline.
 
+The editor has two tabs above the code. **Code** is the text editor. **Build** puts an `architecture-beta` diagram together from forms: add groups, services, junctions and connections, choose icons by name (Mermaid's built-in ones, or a pack's through the icon picker), and click a node in the preview to select it. The Mermaid text stays the only copy of the diagram: each action is a small edit of it, shown as you build, and lines the builder does not manage are kept as they are. Undo and Redo cover builder actions, icon insertions and typing. Layout stays Mermaid's, and other kinds of diagram are edited as text.
+
 ## Quick start
 
 You need Docker.

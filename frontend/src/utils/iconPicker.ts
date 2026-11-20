@@ -97,7 +97,7 @@ export function searchCatalog(entries: readonly CatalogEntry[], query: string): 
 // ---- diagram code ---------------------------------------------------------------------------------
 
 /** The kind of diagram and the index of its header line, from the first meaningful line. */
-function scan(lines: readonly string[]): { kind: DiagramKind; header: number } {
+export function scanDiagram(lines: readonly string[]): { kind: DiagramKind; header: number } {
     let i = 0;
     for (; i < lines.length; i++) {
         const line = lines[i].trim();
@@ -126,26 +126,34 @@ function scan(lines: readonly string[]): { kind: DiagramKind; header: number } {
 
 /** What kind of diagram `code` is, judged by its first meaningful line. */
 export function diagramKind(code: string): DiagramKind {
-    return scan(code.split('\n')).kind;
+    return scanDiagram(code.split('\n')).kind;
 }
 
 // Words a node id must not be: Mermaid keywords of the two diagram kinds that take icons.
 const RESERVED_IDS = new Set(['end', 'graph', 'flowchart', 'subgraph', 'style', 'class', 'classdef', 'click', 'default',
-    'linkstyle', 'direction', 'architecture', 'service', 'group', 'junction', 'in']);
+    'linkstyle', 'direction', 'architecture', 'service', 'group', 'junction', 'in', 'align', 'row', 'column']);
+const ID_MAX = 40;
 
-/** An identifier for the node of `icon` that no word of `code` already uses (compared case-insensitively). */
-function nodeId(code: string, icon: string): string {
-    let base = icon.replace(/[^A-Za-z0-9]+/g, '_');
-    if (!/^[A-Za-z]/.test(base)) base = `n_${base}`;
-    if (RESERVED_IDS.has(base.toLowerCase())) base = `${base}_node`;
+/**
+ * An identifier made from `text` (an icon name or a label) that no word of `code` already uses,
+ * compared case-insensitively: lower-case letters, digits and underscores, starting with a letter.
+ * Lower case also keeps clear of the architecture lexer, which reads a leading L, R, T or B as a
+ * side and a leading `title` as a title statement. `fallback` is used when `text` has no letters
+ * or digits.
+ */
+export function uniqueId(code: string, text: string, fallback = 'node'): string {
+    const plain = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    let base = plain.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, ID_MAX).replace(/_+$/, '') || fallback;
+    if (!/^[a-z]/.test(base) || base.startsWith('title')) base = `n_${base}`;
+    if (RESERVED_IDS.has(base)) base = `${base}_node`;
     const used = new Set((code.match(/\w+/g) ?? []).map((w) => w.toLowerCase()));
     let id = base;
-    for (let n = 2; used.has(id.toLowerCase()); n++) id = `${base}_${n}`;
+    for (let n = 2; used.has(id); n++) id = `${base}_${n}`;
     return id;
 }
 
 function iconLine(kind: 'architecture' | 'flowchart', code: string, prefix: string, entry: CatalogEntry): string {
-    const id = nodeId(code, entry.icon);
+    const id = uniqueId(code, entry.icon);
     return kind === 'architecture'
         ? `  service ${id}(${prefix}:${entry.icon})[${entry.name}]`
         : `  ${id}@{ icon: "${prefix}:${entry.icon}", label: "${entry.name}" }`;
@@ -164,7 +172,7 @@ export interface Insertion {
  */
 export function insertIcon(code: string, cursor: number | null, prefix: string, entry: CatalogEntry): Insertion | null {
     const lines = code.split('\n');
-    const { kind, header } = scan(lines);
+    const { kind, header } = scanDiagram(lines);
     if (kind === 'other') return null;
 
     if (kind === 'empty') {

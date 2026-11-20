@@ -22,12 +22,20 @@ Sirenia is an independent project. It uses Mermaid and is not affiliated with or
 You need Docker.
 
 ```bash
+docker run --rm -p 8080:8080 -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.2.0
+```
+
+Open <http://localhost:8080>.
+
+The image runs on Intel/AMD and on ARM machines (Apple Silicon included), as a non-root user. There is no `latest` tag: pin a version from the [releases](https://github.com/hiranez/sirenia/releases), each of which comes with an SBOM of the image.
+
+To build the image yourself:
+
+```bash
 git clone https://github.com/hiranez/sirenia.git
 cd sirenia
 docker compose up --build
 ```
-
-Open <http://localhost:8080>.
 
 Without Compose:
 
@@ -35,8 +43,6 @@ Without Compose:
 docker build -t sirenia .
 docker run --rm -p 8080:8080 -v sirenia-packs:/packs sirenia
 ```
-
-The image runs on Intel/AMD and on ARM machines (Apple Silicon included), as a non-root user.
 
 ## Icon packs
 
@@ -48,6 +54,8 @@ Sirenia contains recipes, not artwork. A recipe knows where the vendor publishes
 docker run --rm -it -v sirenia-packs:/packs sirenia packs list
 docker run --rm -it -v sirenia-packs:/packs sirenia packs add gcp
 ```
+
+These commands use the name of an image you built yourself; with the published image, write `ghcr.io/hiranez/sirenia:1.2.0` in place of `sirenia`.
 
 `packs add` prints the vendor's terms and asks you to accept them before it downloads anything. It then verifies each download against a pinned SHA-256 checksum and stops on a mismatch. Restart the server afterwards so it loads the pack.
 

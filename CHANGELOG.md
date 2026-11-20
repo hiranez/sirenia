@@ -4,6 +4,10 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- README: the quick start runs the published image; building from source is described after it.
+
 ## [1.2.0] - 2026-11-19
 
 First public release of the project as open source.

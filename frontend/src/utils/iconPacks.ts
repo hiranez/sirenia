@@ -147,9 +147,32 @@ export async function loadPackIndex(fetchImpl: Fetch = globalFetch): Promise<Pac
     }
 }
 
+// One download per pack file and page: Mermaid's loader and the icon picker share it. Keyed by the
+// fetch function so a test (or another caller) with its own fetch never sees another's answer.
+const packFiles = new WeakMap<Fetch, Map<string, Promise<unknown>>>();
+
+/**
+ * The parsed pack file (Iconify JSON plus `sirenia`), fetched once per page. A failed attempt is
+ * forgotten, so the next call tries again. The content is untrusted until a caller validates it.
+ */
+export function loadPackFile(entry: PackEntry, fetchImpl: Fetch = globalFetch): Promise<unknown> {
+    let files = packFiles.get(fetchImpl);
+    if (!files) packFiles.set(fetchImpl, (files = new Map()));
+    let pending = files.get(entry.file);
+    if (!pending) {
+        const cache = files;
+        pending = (async () => {
+            const res = await fetchImpl(`${PACKS_BASE}${entry.file}`, { cache: 'no-cache' });
+            if (!res.ok) throw new Error(`Icon pack ${entry.prefix}: HTTP ${res.status}`);
+            return res.json() as Promise<unknown>;
+        })();
+        cache.set(entry.file, pending);
+        pending.catch(() => { if (cache.get(entry.file) === pending) cache.delete(entry.file); });
+    }
+    return pending;
+}
+
 /** Mermaid loader for one pack: rejects on a non-OK response or non-JSON. */
 export async function fetchPack(entry: PackEntry, fetchImpl: Fetch = globalFetch): Promise<IconifyPart> {
-    const res = await fetchImpl(`${PACKS_BASE}${entry.file}`, { cache: 'no-cache' });
-    if (!res.ok) throw new Error(`Icon pack ${entry.prefix}: HTTP ${res.status}`);
-    return iconifyPart(await res.json(), entry.prefix);
+    return iconifyPart(await loadPackFile(entry, fetchImpl), entry.prefix);
 }

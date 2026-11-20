@@ -11,7 +11,13 @@ const CONTROL_CHARS = /[\p{Cc}\p{Zl}\p{Zp}]/u;
 const NAME_MAX = 80;
 const NOTICE_MAX = 1000;
 const URL_MAX = 500;
-const SIRENIA_KEYS = new Set(['format', 'label', 'owner', 'termsUrl', 'notice']);
+const SIRENIA_KEYS = new Set(['format', 'label', 'owner', 'termsUrl', 'notice', 'catalog']);
+const CATALOG_MAX = 5000;
+const CATALOG_KEYS = new Set(['icon', 'name', 'group']);
+// Characters that mean something in Mermaid syntax: a catalog name ends up inside a diagram line.
+const MERMAID_SYNTAX_CHARS = /[\[\]{}<>"`\\|#;%]/;
+// The icon name is written into a diagram line as well, so it has to be a plain Iconify name.
+const CATALOG_ICON = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const NOTICE_KEYS = new Set(['editor', 'editorAfter', 'export']);
 // Iconify fields that end up inside generated SVG attributes; they must be what Iconify expects.
 const NUMBER_FIELDS = ['left', 'top', 'width', 'height', 'rotate'];
@@ -61,7 +67,31 @@ function checkText(value, where, max, fail) {
   if (CONTROL_CHARS.test(value)) fail(`${where} must not contain control characters`);
 }
 
-function checkSirenia(meta, fail) {
+/** Validate `sirenia.catalog` against the pack it belongs to; reports through `fail` (which throws). */
+function checkCatalog(catalog, pack, fail) {
+  if (!Array.isArray(catalog)) fail('"sirenia.catalog" must be an array');
+  if (catalog.length > CATALOG_MAX) fail(`"sirenia.catalog" must have at most ${CATALOG_MAX} entries`);
+  const seen = new Set();
+  catalog.forEach((entry, i) => {
+    const where = `"sirenia.catalog" entry ${i + 1}`;
+    if (!isPlainObject(entry)) fail(`${where} must be an object`);
+    for (const k of Object.keys(entry)) if (!CATALOG_KEYS.has(k)) fail(`${where} has unknown key "${k}"`);
+    const { icon } = entry;
+    if (typeof icon !== 'string' || !(Object.hasOwn(pack.icons, icon) || (isPlainObject(pack.aliases) && Object.hasOwn(pack.aliases, icon)))) {
+      fail(`${where}: "icon" must name an icon or alias of this pack`);
+    }
+    if (!CATALOG_ICON.test(icon)) fail(`${where}: icon "${icon}" must be lowercase letters, digits and single hyphens to be listed`);
+    if (seen.has(icon)) fail(`${where}: duplicate icon "${icon}"`);
+    seen.add(icon);
+    for (const k of ['name', 'group']) {
+      if (entry[k] === undefined && k === 'group') continue;
+      checkText(entry[k], `${where} (icon "${icon}") "${k}"`, NAME_MAX, fail);
+      if (MERMAID_SYNTAX_CHARS.test(entry[k])) fail(`${where} (icon "${icon}") "${k}" must not contain any of [ ] { } < > " \` \\ | # ; %`);
+    }
+  });
+}
+
+function checkSirenia(meta, pack, fail) {
   if (!isPlainObject(meta)) fail('"sirenia" must be an object');
   for (const k of Object.keys(meta)) if (!SIRENIA_KEYS.has(k)) fail(`"sirenia" has unknown key "${k}"`);
   if (meta.format !== 1) fail('"sirenia.format" must be 1');
@@ -73,6 +103,7 @@ function checkSirenia(meta, fail) {
     try { ok = meta.termsUrl.startsWith('https://') && new URL(meta.termsUrl).protocol === 'https:'; } catch { ok = false; }
     if (!ok) fail('"sirenia.termsUrl" must be an https:// URL');
   }
+  if (meta.catalog !== undefined) checkCatalog(meta.catalog, pack, fail);
   if (meta.notice !== undefined) {
     if (!isPlainObject(meta.notice)) fail('"sirenia.notice" must be an object');
     for (const k of Object.keys(meta.notice)) {
@@ -112,8 +143,8 @@ function readPack(file) {
       checkTransforms(alias, `alias "${name}"`, fail);
     }
   }
-  if (pack.sirenia !== undefined) checkSirenia(pack.sirenia, fail);
+  if (pack.sirenia !== undefined) checkSirenia(pack.sirenia, pack, fail);
   return pack;
 }
 
-module.exports = { PREFIX, readPack };
+module.exports = { PREFIX, readPack, checkCatalog };

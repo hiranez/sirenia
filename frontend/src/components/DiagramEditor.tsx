@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import mermaid from 'mermaid';
 import type { AsyncIconLoader } from 'mermaid';
 import { downloadSecureImage, warmUpRenderer, ExportError } from '../services/api';
 import { isPng, readPngText, MAX_SOURCE_LENGTH, SOURCE_KEYS } from '../utils/pngMetadata';
 import { branding } from '../branding';
 import { composeFooterNotice, fetchPack, loadPackIndex, type PackEntry } from '../utils/iconPacks';
+import { insertIcon, type CatalogEntry } from '../utils/iconPicker';
+import IconPicker from './IconPicker';
 import '../index.css'; // Ensure styles are loaded
 
 // Example diagrams for quick start. `requiresPack`: shown only when that icon pack is installed.
@@ -108,6 +110,10 @@ const DiagramEditor: React.FC = () => {
     // Installed icon packs (from /packs/index.json); null until the index has been read.
     const [packs, setPacks] = useState<PackEntry[] | null>(null);
     const previewRef = useRef<HTMLDivElement>(null);
+    const codeRef = useRef<HTMLTextAreaElement>(null);
+    // Last caret position in the code field (kept after focus moves to the icon picker); null = none yet.
+    const caretRef = useRef<number | null>(null);
+    const [pickerOpen, setPickerOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Helper: Break long text in SVG into multiple tspan lines
@@ -441,6 +447,33 @@ const DiagramEditor: React.FC = () => {
         }
     };
 
+    // Setting the text moves the caret to the end of the field; put it back where the icon was added.
+    useLayoutEffect(() => {
+        const field = codeRef.current;
+        if (field && caretRef.current !== null && document.activeElement !== field) {
+            field.setSelectionRange(caretRef.current, caretRef.current);
+        }
+    }, [code]);
+
+    const insertPackIcon = (prefix: string, entry: CatalogEntry): boolean => {
+        const result = insertIcon(code, caretRef.current, prefix, entry);
+        if (!result) return false;
+        caretRef.current = result.cursor;
+        editCode(result.code);
+        return true;
+    };
+
+    const closePicker = () => {
+        setPickerOpen(false);
+        const field = codeRef.current;
+        if (!field) return;
+        field.focus();
+        if (caretRef.current !== null) {
+            const at = Math.min(caretRef.current, field.value.length);
+            field.setSelectionRange(at, at);
+        }
+    };
+
     // Tick the elapsed time while an export is running (drives the progress bar and its message).
     useEffect(() => {
         if (exportState.phase !== 'working') return;
@@ -530,6 +563,7 @@ const DiagramEditor: React.FC = () => {
                 ? firstPngSource(bytes)
                 : extractMermaidCodeFromSvgText(new TextDecoder().decode(bytes));
             if (extracted) {
+                caretRef.current = null;
                 setCode(extracted);
                 setUploadError(null);
                 setError(null);
@@ -599,7 +633,7 @@ const DiagramEditor: React.FC = () => {
                             <button
                                 key={example.name}
                                 className="example-btn"
-                                onClick={() => editCode(example.code)}
+                                onClick={() => { caretRef.current = null; editCode(example.code); }}
                                 title={`Load ${example.name} template`}
                             >
                                 {example.name}
@@ -632,10 +666,17 @@ const DiagramEditor: React.FC = () => {
                         </label>
                     </div>
                 </div>
+                {installedPacks.length > 0 && (
+                    <div className="code-tools">
+                        <button type="button" className="example-btn" onClick={() => setPickerOpen(true)}>Insert icon…</button>
+                    </div>
+                )}
                 <textarea
+                    ref={codeRef}
                     className="code-editor"
                     value={code}
-                    onChange={(e) => editCode(e.target.value)}
+                    onChange={(e) => { caretRef.current = e.target.selectionEnd; editCode(e.target.value); }}
+                    onSelect={(e) => { caretRef.current = e.currentTarget.selectionEnd; }}
                     placeholder="Enter Mermaid code here..."
                 />
                 <div className="action-row">
@@ -697,6 +738,9 @@ const DiagramEditor: React.FC = () => {
                     )}
                 </div>
             </div>
+            {pickerOpen && installedPacks.length > 0 && (
+                <IconPicker packs={installedPacks} code={code} onInsert={insertPackIcon} onClose={closePicker} />
+            )}
             <div className="preview-container">
                 <div className="preview-toolbar">
                     <div className="zoom-controls">

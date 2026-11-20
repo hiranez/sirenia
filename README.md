@@ -63,6 +63,8 @@ These commands use the name of an image you built yourself; with the published i
 |---|---|---|
 | `gcp` | Google Cloud product icons | Google |
 
+With a pack installed, the editor shows an "Insert icon..." button above the code. It opens a searchable list of the pack's icons by their official product names, previews the selected one in a small diagram, and adds it to an architecture or flowchart diagram at the cursor. The list is text only: the icon is drawn only inside a diagram, unmodified, with its official name as the label. A pack lists these names in the optional `sirenia.catalog` key of its file, an array of `{ "icon", "name", "group" }` entries (`group` is optional; names may not contain characters that have a meaning in Mermaid syntax). Without a catalog the list falls back to the pack's icon names.
+
 You can also install an [Iconify](https://iconify.design) JSON file of your own with `packs add --file my-icons.json`. Packs are checked when they are loaded: icons that contain scripts, embedded documents or references to anything outside the file are rejected. You are responsible for having the right to use the artwork you install.
 
 Vendor icons are trademarks of their owners and are not covered by Sirenia's licence. See [NOTICE.md](NOTICE.md).

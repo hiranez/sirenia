@@ -403,6 +403,218 @@ body {
   transform: translateY(0);
 }
 
+/* Icon picker: a text list and one rendered diagram; vendor icons are never drawn anywhere else. */
+.code-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -8px;
+}
+
+.icon-picker {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.icon-picker::backdrop {
+  background: rgba(2, 6, 23, 0.7);
+}
+
+.icon-picker-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  box-sizing: border-box;
+  max-height: calc(100vh - 50px);
+}
+
+.icon-picker h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #e0e7ff;
+}
+
+.icon-picker-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.icon-picker select,
+.icon-picker-controls input {
+  background: #0b1223;
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.icon-picker-controls input {
+  flex: 1;
+  min-width: 0;
+}
+
+.icon-picker select:focus-visible,
+.icon-picker input:focus-visible,
+.icon-picker button:focus-visible,
+.icon-picker a:focus-visible,
+.code-tools button:focus-visible {
+  outline: 2px solid #a5b4fc;
+  outline-offset: 2px;
+}
+
+.icon-picker-count,
+.icon-picker-notice,
+.icon-picker-hint,
+.icon-picker-terms {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.icon-picker-notice {
+  min-height: 18px;
+  color: #6ee7b7;
+}
+
+.icon-picker-hint {
+  color: #fcd34d;
+}
+
+.icon-picker-terms a {
+  color: #a5b4fc;
+}
+
+.icon-picker-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+.icon-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  height: 340px;
+  overflow-y: auto;
+  background: #0b1223;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+}
+
+.icon-picker-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.icon-picker-row:hover {
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.icon-picker-row.selected {
+  background: rgba(99, 102, 241, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(165, 180, 252, 0.6);
+}
+
+.icon-picker-row code {
+  font-size: 11px;
+  color: #a5b4fc;
+  align-self: center;
+}
+
+.icon-picker-group {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.icon-picker-more {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.icon-picker-preview {
+  height: 340px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 8px;
+}
+
+.icon-picker-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.icon-picker-error,
+.icon-picker-empty {
+  margin: 0;
+  font-size: 13px;
+  white-space: pre-wrap;
+  color: #b91c1c;
+}
+
+.icon-picker-empty {
+  color: #475569;
+}
+
+.icon-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.icon-picker-primary {
+  padding: 8px 14px;
+  background: linear-gradient(120deg, #6366f1, #10b981);
+  color: #0b1223;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.icon-picker-primary:disabled,
+.icon-picker .example-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  .icon-picker-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .icon-picker-list {
+    height: 200px;
+  }
+
+  .icon-picker-preview {
+    height: 170px;
+  }
+}
+
 /* Terms of Service Footer */
 .tos-footer {
   margin-top: 16px;

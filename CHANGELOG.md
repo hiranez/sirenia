@@ -4,6 +4,8 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-21
+
 ### Added
 
 - Visual builder for architecture diagrams: a "Build" tab next to the code ("Code" stays the default) adds and edits groups, services, junctions and connections with forms, from an outline of the diagram. Icons are chosen by name: Mermaid's built-in ones, or a pack's through the icon picker, which has a choosing mode for this. Clicking a service, group or junction in the preview selects it; the selection is an outline drawn around the node, never a change to its icon. The Mermaid text remains the only copy of the diagram: every action is a minimal edit of it, lines the builder does not manage (and comments, blank lines, line endings) are kept byte for byte, and edits Mermaid would reject (a group inside itself, a parent group defined after its child, a second connection between the same two nodes) are refused with a message. Other diagram kinds are left to the Code tab.

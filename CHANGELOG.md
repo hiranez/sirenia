@@ -8,9 +8,14 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 - Visual builder for architecture diagrams: a "Build" tab next to the code ("Code" stays the default) adds and edits groups, services, junctions and connections with forms, from an outline of the diagram. Icons are chosen by name: Mermaid's built-in ones, or a pack's through the icon picker, which has a choosing mode for this. Clicking a service, group or junction in the preview selects it; the selection is an outline drawn around the node, never a change to its icon. The Mermaid text remains the only copy of the diagram: every action is a minimal edit of it, lines the builder does not manage (and comments, blank lines, line endings) are kept byte for byte, and edits Mermaid would reject (a group inside itself, a parent group defined after its child, a second connection between the same two nodes) are refused with a message. Other diagram kinds are left to the Code tab.
 - Undo and Redo in the builder, over builder actions, icon insertions and typing in the code field (a burst of typing is one step).
+- "How to add an icon pack" in the editor: a dialog with the recipes this installation offers (installed or not) and the exact commands for the published image, Docker Compose and a source checkout, each with a Copy button. It opens from "Add an icon pack..." above the code and next to the icon field in the Build tab (shown while no pack is installed), from the "add an icon pack" link in the Features list, and from "Add another pack..." in the icon picker. It is offered only where recipes exist; a hosted edition that bundles its packs shows none of it.
+- `GET /pack-recipes.json` on the front door: the recipes the installation offers (prefix, label, owner) and, when there are any, the version; read once at start from `PACK_RECIPES_DIR`, otherwise from `icons/` next to the frontend directory.
+- The container prints a line after "Ready on port ...": the installed packs, or, with none, the command that adds one.
 
 ### Fixed
 
+- README, "Icon packs": a numbered walk-through for the published image (the full command, restart, reload, what appears in the editor), then the Compose and from-source variants. It no longer asks the reader to substitute an image name by hand, and the quick start points to it.
+- The built-in "Google Cloud Architecture" example names its network group by the catalog entry, "Virtual Private Cloud" (`gcp:virtual-private-cloud`), instead of "VPC" (`gcp:vpc`).
 - A wide diagram no longer squeezes the sidebar on narrow windows (the preview scrolls instead), and the sidebar scrolls on its own, so the preview stays in view.
 
 ## [1.4.0] - 2026-11-20

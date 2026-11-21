@@ -5,10 +5,12 @@ import { downloadSecureImage, warmUpRenderer, ExportError } from '../services/ap
 import { isPng, readPngText, MAX_SOURCE_LENGTH, SOURCE_KEYS } from '../utils/pngMetadata';
 import { branding } from '../branding';
 import { composeFooterNotice, fetchPack, loadPackIndex, type PackEntry } from '../utils/iconPacks';
+import { loadRecipes, type RecipeInfo } from '../utils/packHelp';
 import { insertIcon, type CatalogEntry } from '../utils/iconPicker';
 import { canRedo, canUndo, createHistory, record, redo, undo, type History } from '../utils/history';
 import { nodeAt, showSelection } from '../utils/architecturePreview';
 import IconPicker from './IconPicker';
+import PackHelp from './PackHelp';
 import ArchitectureBuilder, { type BuilderSelection } from './ArchitectureBuilder';
 import '../index.css'; // Ensure styles are loaded
 
@@ -50,7 +52,7 @@ const EXAMPLES: { name: string; code: string; requiresPack?: string }[] = [
         requiresPack: 'gcp',
         code: `architecture-beta
   group gcp(cloud)[Google Cloud project]
-  group vpc(gcp:vpc)[VPC] in gcp
+  group vpc(gcp:virtual-private-cloud)[Virtual Private Cloud] in gcp
   service lb(gcp:cloud-load-balancing)[Cloud Load Balancing] in gcp
   service run(gcp:cloud-run)[Cloud Run] in vpc
   service sql(gcp:cloud-sql)[Cloud SQL] in vpc
@@ -129,6 +131,13 @@ const DiagramEditor: React.FC = () => {
     // Last caret position in the code field (kept after focus moves to the icon picker); null = none yet.
     const caretRef = useRef<number | null>(null);
     const [pickerOpen, setPickerOpen] = useState(false);
+    // The pack recipes this installation offers (empty on a hosted edition, which bundles its packs),
+    // and the "How to add an icon pack" help with the element that opened it.
+    const [recipeInfo, setRecipeInfo] = useState<RecipeInfo | null>(null);
+    const [helpOpener, setHelpOpener] = useState<HTMLElement | null | undefined>(undefined); // undefined = closed
+    const insertButtonRef = useRef<HTMLButtonElement>(null);
+    // Set while the picker hands over to the help, so that closing the picker does not take the focus.
+    const pickerHandoff = useRef(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Helper: Break long text in SVG into multiple tspan lines
@@ -306,6 +315,13 @@ const DiagramEditor: React.FC = () => {
             })));
             setPacks(entries);
         });
+        return () => { active = false; };
+    }, []);
+
+    // Recipes are only needed to decide whether the "add an icon pack" entry points appear.
+    useEffect(() => {
+        let active = true;
+        void loadRecipes().then((info) => { if (active) setRecipeInfo(info); });
         return () => { active = false; };
     }, []);
 
@@ -521,6 +537,11 @@ const DiagramEditor: React.FC = () => {
 
     const closePicker = () => {
         setPickerOpen(false);
+        if (pickerHandoff.current) {
+            pickerHandoff.current = false;
+            setChoosing(null);
+            return;
+        }
         // Choosing for the builder: focus goes back to the button that opened the picker.
         if (choosing) {
             setChoosing(null);
@@ -645,6 +666,16 @@ const DiagramEditor: React.FC = () => {
     const commercial = Boolean(branding.contactEmail);
 
     const installedPacks = packs ?? [];
+    // The help is offered only where recipes exist; a hosted edition has none.
+    const recipes = recipeInfo?.recipes ?? [];
+    const canAddPack = packs !== null && recipes.length > 0;
+    const openHelp = (opener: HTMLElement | null) => setHelpOpener(opener);
+    const closeHelp = () => {
+        const opener = helpOpener;
+        setHelpOpener(undefined);
+        if (opener?.isConnected) opener.focus();
+        else codeRef.current?.focus();
+    };
     const hasPack = (prefix: string) => installedPacks.some((p) => p.prefix === prefix);
     const otherPacks = installedPacks.filter((p) => p.prefix !== 'gcp');
     const examples = EXAMPLES.filter((example) => !example.requiresPack || hasPack(example.requiresPack));
@@ -679,7 +710,9 @@ const DiagramEditor: React.FC = () => {
                             ))}</li>
                         )}
                         {packs !== null && installedPacks.length === 0 && (
-                            <li><strong>Cloud provider icons:</strong> add an icon pack to draw with a vendor's official product icons</li>
+                            <li><strong>Cloud provider icons:</strong> {canAddPack
+                                ? <button type="button" className="link-btn" onClick={(e) => openHelp(e.currentTarget)}>add an icon pack</button>
+                                : 'add an icon pack'} to draw with a vendor's official product icons</li>
                         )}
                         <li><strong>Rate Limited:</strong> 20 req/min{commercial && ' - contact us for enterprise quotas'}</li>
                     </ul>
@@ -751,7 +784,12 @@ const DiagramEditor: React.FC = () => {
                 <div id="editor-panel-code" role="tabpanel" aria-labelledby="editor-tab-code" className="editor-panel" hidden={tab !== 'code'}>
                     {installedPacks.length > 0 && (
                         <div className="code-tools">
-                            <button type="button" className="example-btn" onClick={() => setPickerOpen(true)}>Insert icon…</button>
+                            <button ref={insertButtonRef} type="button" className="example-btn" onClick={() => setPickerOpen(true)}>Insert icon…</button>
+                        </div>
+                    )}
+                    {installedPacks.length === 0 && canAddPack && (
+                        <div className="code-tools">
+                            <button type="button" className="example-btn" onClick={(e) => openHelp(e.currentTarget)}>Add an icon pack…</button>
                         </div>
                     )}
                     <textarea
@@ -774,6 +812,7 @@ const DiagramEditor: React.FC = () => {
                         onUndo={() => stepHistory(undo)}
                         onRedo={() => stepHistory(redo)}
                         onChooseIcon={installedPacks.length > 0 ? (onChoose, opener) => setChoosing({ onChoose, opener }) : undefined}
+                        onAddPack={installedPacks.length === 0 && canAddPack ? openHelp : undefined}
                     />
                 </div>
                 <div className="action-row">
@@ -836,7 +875,11 @@ const DiagramEditor: React.FC = () => {
                 </div>
             </div>
             {(pickerOpen || choosing) && installedPacks.length > 0 && (
-                <IconPicker packs={installedPacks} code={code} onInsert={insertPackIcon} onChoose={choosing?.onChoose} onClose={closePicker} />
+                <IconPicker packs={installedPacks} code={code} onInsert={insertPackIcon} onChoose={choosing?.onChoose} onClose={closePicker}
+                    onAddPack={canAddPack ? () => { pickerHandoff.current = true; openHelp(choosing?.opener ?? insertButtonRef.current); } : undefined} />
+            )}
+            {helpOpener !== undefined && canAddPack && recipeInfo && (
+                <PackHelp recipes={recipeInfo.recipes} version={recipeInfo.version} installed={installedPacks} onClose={closeHelp} />
             )}
             <div className="preview-container">
                 <div className="preview-toolbar">

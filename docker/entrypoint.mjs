@@ -17,6 +17,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { discoverRecipes, recipesRoot } from '../frontend/packRecipes.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const STOP_SIGNALS = ['SIGTERM', 'SIGINT'];
@@ -133,6 +134,39 @@ function version(where) {
   return 'unknown';
 }
 
+/** Prefixes of the installed packs, from the index that `packs` writes; none when it cannot be read. */
+export function installedPrefixes(packsDir) {
+  try {
+    const index = JSON.parse(fs.readFileSync(path.join(packsDir, 'index.json'), 'utf8'));
+    return (Array.isArray(index?.packs) ? index.packs : []).flatMap((p) => (typeof p?.prefix === 'string' ? [p.prefix] : []));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The line printed after "Ready on port ...": the installed packs, or, with none installed and
+ * recipes available, how to add one. Null when there is nothing to say (no packs and no recipes).
+ * @param {{ installed: string[], recipes: { prefix: string }[], version: string }} state
+ */
+export function packsHint({ installed, recipes, version }) {
+  if (installed.length) return `Icon packs installed: ${installed.join(', ')}`;
+  if (!recipes.length) return null;
+  const tag = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version) ? version : '<version>';
+  return `No icon pack is installed. To add one, run: docker run --rm -it -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:${tag} packs add ${recipes[0].prefix}\n`
+    + 'then restart this container and reload the page. See the README, section "Icon packs".';
+}
+
+/** The hint for this installation: the packs directory is the one both programs read. */
+function startupHint(where, env) {
+  const packsDir = env.PACKS_DIR ? path.resolve(env.PACKS_DIR) : path.join(where.dist, 'packs');
+  return packsHint({
+    installed: installedPrefixes(packsDir),
+    recipes: discoverRecipes(recipesRoot(env, where.frontendDir)),
+    version: version(where),
+  });
+}
+
 // ---- running ---------------------------------------------------------------------------------
 
 function start(name, script, env, cwd) {
@@ -222,7 +256,12 @@ async function serve(where) {
     // Ready once the proxy answers on its own port too.
     (async () => {
       while (running(proxy) && !stopping) {
-        if (await healthy(settings.port)) { console.log(`Ready on port ${settings.port}`); return; }
+        if (await healthy(settings.port)) {
+          console.log(`Ready on port ${settings.port}`);
+          const hint = startupHint(where, process.env);
+          if (hint) console.log(hint);
+          return;
+        }
         await new Promise((resolve) => setTimeout(resolve, HEALTH_POLL_MS));
       }
     })();

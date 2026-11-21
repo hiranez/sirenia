@@ -121,7 +121,7 @@ COPY backend/utils/ ./utils/
 WORKDIR /app
 COPY --from=proxy-deps /src/frontend/node_modules ./frontend/node_modules
 # package.json declares the proxy's files as ES modules ("type": "module").
-COPY frontend/package.json frontend/auth-proxy.js frontend/upstream.js ./frontend/
+COPY frontend/package.json frontend/auth-proxy.js frontend/upstream.js frontend/packRecipes.js ./frontend/
 COPY --from=editor /src/frontend/dist ./frontend/dist
 # The packs command, its index builder, and the Google Cloud recipe's generator, which imports
 # fflate (resolved from /app/node_modules) and ./packs/pack-index.mjs; the command loads the render

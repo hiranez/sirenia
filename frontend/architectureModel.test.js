@@ -23,7 +23,7 @@ const refused = (result, code) => {
 // The "Google Cloud Architecture" example of the editor (DiagramEditor.tsx), unchanged.
 const GCP = `architecture-beta
   group gcp(cloud)[Google Cloud project]
-  group vpc(gcp:vpc)[VPC] in gcp
+  group vpc(gcp:virtual-private-cloud)[Virtual Private Cloud] in gcp
   service lb(gcp:cloud-load-balancing)[Cloud Load Balancing] in gcp
   service run(gcp:cloud-run)[Cloud Run] in vpc
   service sql(gcp:cloud-sql)[Cloud SQL] in vpc
@@ -134,7 +134,7 @@ test('parse: the Google Cloud example', () => {
   assert.equal(m.header, 0);
   assert.equal(m.items.length, GCP.split('\n').length);
   assert.deepEqual(m.items[1], { kind: 'group', line: 1, id: 'gcp', icon: 'cloud', label: 'Google Cloud project', parent: null });
-  assert.deepEqual(m.items[2], { kind: 'group', line: 2, id: 'vpc', icon: 'gcp:vpc', label: 'VPC', parent: 'gcp' });
+  assert.deepEqual(m.items[2], { kind: 'group', line: 2, id: 'vpc', icon: 'gcp:virtual-private-cloud', label: 'Virtual Private Cloud', parent: 'gcp' });
   assert.deepEqual(m.items[4], { kind: 'service', line: 4, id: 'run', icon: 'gcp:cloud-run', iconText: null, label: 'Cloud Run', parent: 'vpc' });
   assert.deepEqual(m.items[8], {
     kind: 'edge', line: 8, label: null,
@@ -407,7 +407,7 @@ test('removeNode: removes the edges that touch it', () => {
   assert.equal(ok(removeNode(GCP, 'run')).code, lines(
     'architecture-beta',
     '  group gcp(cloud)[Google Cloud project]',
-    '  group vpc(gcp:vpc)[VPC] in gcp',
+    '  group vpc(gcp:virtual-private-cloud)[Virtual Private Cloud] in gcp',
     '  service lb(gcp:cloud-load-balancing)[Cloud Load Balancing] in gcp',
     '  service sql(gcp:cloud-sql)[Cloud SQL] in vpc',
     '  service bq(gcp:bigquery)[BigQuery] in gcp',
@@ -422,12 +422,12 @@ test('removeNode: removes the edges that touch it', () => {
 
 test('removeNode: a removed group hands its nodes to its parent', () => {
   assert.equal(ok(removeNode(GCP, 'vpc')).code, GCP
-    .replace('  group vpc(gcp:vpc)[VPC] in gcp\n', '')
+    .replace('  group vpc(gcp:virtual-private-cloud)[Virtual Private Cloud] in gcp\n', '')
     .replace('[Cloud Run] in vpc', '[Cloud Run] in gcp')
     .replace('[Cloud SQL] in vpc', '[Cloud SQL] in gcp'));
   assert.equal(ok(removeNode(GCP, 'gcp')).code, lines(
     'architecture-beta',
-    '  group vpc(gcp:vpc)[VPC]',
+    '  group vpc(gcp:virtual-private-cloud)[Virtual Private Cloud]',
     '  service lb(gcp:cloud-load-balancing)[Cloud Load Balancing]',
     '  service run(gcp:cloud-run)[Cloud Run] in vpc',
     '  service sql(gcp:cloud-sql)[Cloud SQL] in vpc',

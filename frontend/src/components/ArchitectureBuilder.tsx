@@ -22,6 +22,8 @@ interface Props {
     onRedo: () => void;
     /** Opens the icon picker in choosing mode (focus goes back to `opener`); absent when no pack is installed. */
     onChooseIcon?: (onChoose: (prefix: string, entry: CatalogEntry) => void, opener: HTMLElement) => void;
+    /** Opens the "How to add an icon pack" help; offered when no pack is installed and recipes exist. */
+    onAddPack?: (opener: HTMLElement) => void;
 }
 
 const SIDE_WORDS: Record<Side, string> = { L: 'left', R: 'right', T: 'top', B: 'bottom' };
@@ -52,7 +54,7 @@ function onRowKeys(e: React.KeyboardEvent<HTMLElement>, rows: Row[], at: number,
 
 // The visual builder for architecture diagrams. It keeps no copy of the diagram: every render reads
 // the current text, and every action replaces it with the text the model's edit returns.
-const ArchitectureBuilder: React.FC<Props> = ({ code, onEdit, selection, onSelect, canUndo, canRedo, onUndo, onRedo, onChooseIcon }) => {
+const ArchitectureBuilder: React.FC<Props> = ({ code, onEdit, selection, onSelect, canUndo, canRedo, onUndo, onRedo, onChooseIcon, onAddPack }) => {
     const id = useId();
     const model = useMemo(() => parseArchitecture(code), [code]);
     const kind = diagramKind(code);
@@ -215,7 +217,7 @@ const ArchitectureBuilder: React.FC<Props> = ({ code, onEdit, selection, onSelec
                             : <ul role="listbox" aria-labelledby={`${id}-edges`}>{edgeRows.map((r, i) => renderRow(r, edgeRows, i, 'option'))}</ul>}
                     </div>
                     {formTarget
-                        ? <BuilderForm key={formKey} code={code} model={model} target={formTarget} onChooseIcon={onChooseIcon} onDone={done} onCancel={() => setAdding(null)} />
+                        ? <BuilderForm key={formKey} code={code} model={model} target={formTarget} onChooseIcon={onChooseIcon} onAddPack={onAddPack} onDone={done} onCancel={() => setAdding(null)} />
                         : <p className="builder-hint">Select an item above or in the preview to edit it, or add one.</p>}
                     {model.unmanaged.length > 0 && (
                         <p className="builder-unmanaged">

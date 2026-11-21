@@ -46,28 +46,71 @@ docker build -t sirenia .
 docker run --rm -p 8080:8080 -v sirenia-packs:/packs sirenia
 ```
 
+To draw with a cloud provider's official icons, add an icon pack: see [Icon packs](#icon-packs).
+
 ## Icon packs
 
-A pack is a set of icons you can use in `architecture-beta` diagrams and flowchart icon shapes, for example `service api(gcp:cloud-run)[Cloud Run]`.
+A pack is a set of icons you can use in `architecture-beta` diagrams and flowchart icon shapes, for example `service api(gcp:cloud-run)[Cloud Run]`. Without a pack, the editor draws only Mermaid's built-in icons.
 
-Sirenia contains recipes, not artwork. A recipe knows where the vendor publishes its icons, the checksums of those files, and the vendor's terms of use. Installing a pack downloads the artwork from the vendor to your machine:
+Sirenia contains recipes, not artwork. A recipe knows where the vendor publishes its icons, the checksums of those files, and the vendor's terms of use. Installing a pack downloads the artwork from the vendor to your machine, after you accept those terms in the terminal.
+
+The editor shows the same commands: open **Add an icon pack...** above the code (or next to the icon field in the Build tab) while no pack is installed. The container also prints a hint when it starts.
+
+### With the published image
+
+This adds the Google Cloud icons (the recipe `gcp`) to the container from the quick start.
+
+1. In a terminal, run:
+
+   ```bash
+   docker run --rm -it -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.4.0 packs add gcp
+   ```
+
+   It shows the vendor's terms and asks you to type `yes`. Then it downloads the icons from the vendor and checks each download against a pinned SHA-256 checksum; a mismatch stops the install.
+
+   The `-v sirenia-packs:/packs` part must be the same volume your server was started with. With a different volume, the pack is installed where the server does not look.
+
+2. Stop the running container and start it again with the same command as before. Packs are read when the server starts, so a restart is needed.
+3. Reload the editor in the browser. The **Insert icon...** button now appears above the code, and **Choose from a pack...** next to the icon field in the Build tab.
+
+`packs list` shows the recipes and the packs you have installed:
 
 ```bash
-docker run --rm -it -v sirenia-packs:/packs sirenia packs list
-docker run --rm -it -v sirenia-packs:/packs sirenia packs add gcp
+docker run --rm -it -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.4.0 packs list
 ```
 
-These commands use the name of an image you built yourself; with the published image, write `ghcr.io/hiranez/sirenia:1.4.0` in place of `sirenia`.
+### Built from source
 
-`packs add` prints the vendor's terms and asks you to accept them before it downloads anything. It then verifies each download against a pinned SHA-256 checksum and stops on a mismatch. Restart the server afterwards so it loads the pack.
+With Docker Compose, from the project folder:
+
+```bash
+docker compose run --rm sirenia packs add gcp
+docker compose restart sirenia
+```
+
+With the image built by hand, use its name in place of the published one: `docker run --rm -it -v sirenia-packs:/packs sirenia packs add gcp`.
+
+Without Docker, from the project folder (Node.js 22.12 or later, `npm ci` run once in the project folder):
+
+```bash
+npm run packs -- add gcp
+```
+
+Then restart the two programs, the render service and the editor's server. Reload the page afterwards.
+
+### The recipes
 
 | Recipe | Icons | Owner |
 |---|---|---|
 | `gcp` | Google Cloud product icons | Google |
 
-With a pack installed, the editor shows an "Insert icon..." button above the code. It opens a searchable list of the pack's icons by their official product names, previews the selected one in a small diagram, and adds it to an architecture or flowchart diagram at the cursor. The list is text only: the icon is drawn only inside a diagram, unmodified, with its official name as the label. A pack lists these names in the optional `sirenia.catalog` key of its file, an array of `{ "icon", "name", "group" }` entries (`group` is optional; names may not contain characters that have a meaning in Mermaid syntax). Without a catalog the list falls back to the pack's icon names.
+### Your own icons
 
-You can also install an [Iconify](https://iconify.design) JSON file of your own with `packs add --file my-icons.json`. Packs are checked when they are loaded: icons that contain scripts, embedded documents or references to anything outside the file are rejected. You are responsible for having the right to use the artwork you install.
+You can install an [Iconify](https://iconify.design) JSON file of your own with `packs add --file my-icons.json`. Packs are checked when they are loaded: icons that contain scripts, embedded documents or references to anything outside the file are rejected. You are responsible for having the right to use the artwork you install.
+
+### In the editor
+
+With a pack installed, the editor shows an "Insert icon..." button above the code. It opens a searchable list of the pack's icons by their official product names, previews the selected one in a small diagram, and adds it to an architecture or flowchart diagram at the cursor. The list is text only: the icon is drawn only inside a diagram, unmodified, with its official name as the label. A pack lists these names in the optional `sirenia.catalog` key of its file, an array of `{ "icon", "name", "group" }` entries (`group` is optional; names may not contain characters that have a meaning in Mermaid syntax). Without a catalog the list falls back to the pack's icon names.
 
 Vendor icons are trademarks of their owners and are not covered by Sirenia's licence. See [NOTICE.md](NOTICE.md).
 

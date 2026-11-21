@@ -17,12 +17,14 @@ interface Props {
     code: string;
     /** Adds the icon to the diagram; false when it could not be added. */
     onInsert: (prefix: string, entry: CatalogEntry) => boolean;
+    /** Choosing mode (the builder's icon field): returns the entry and closes; nothing is inserted. */
+    onChoose?: (prefix: string, entry: CatalogEntry) => void;
     onClose: () => void;
 }
 
 // Searchable list of the icons of an installed pack, by official product name. The list is text
 // only: an icon is drawn only inside the rendered one-node diagram of the selected entry.
-const IconPicker: React.FC<Props> = ({ packs, code, onInsert, onClose }) => {
+const IconPicker: React.FC<Props> = ({ packs, code, onInsert, onChoose, onClose }) => {
     const id = useId();
     const dialogRef = useRef<HTMLDialogElement>(null);
     const searchRef = useRef<HTMLInputElement>(null);
@@ -37,7 +39,8 @@ const IconPicker: React.FC<Props> = ({ packs, code, onInsert, onClose }) => {
 
     const pack = packs.find((p) => p.prefix === prefix) ?? packs[0];
     const catalog = catalogs[pack.prefix] ?? LOADING;
-    const canInsert = diagramKind(code) !== 'other';
+    const choosing = onChoose !== undefined;
+    const canInsert = choosing || diagramKind(code) !== 'other';
 
     useEffect(() => {
         const dialog = dialogRef.current;
@@ -104,7 +107,12 @@ const IconPicker: React.FC<Props> = ({ packs, code, onInsert, onClose }) => {
 
     const insert = (entry: CatalogEntry | null = selected) => {
         if (!entry || !canInsert) return;
-        if (onInsert(pack.prefix, entry)) setNotice(`Added ${entry.name}`);
+        if (onChoose) {
+            onChoose(pack.prefix, entry);
+            dialogRef.current?.close();
+        } else if (onInsert(pack.prefix, entry)) {
+            setNotice(`Added ${entry.name}`);
+        }
     };
 
     const copyName = async () => {
@@ -149,7 +157,7 @@ const IconPicker: React.FC<Props> = ({ packs, code, onInsert, onClose }) => {
             onClick={(e) => { if (e.target === e.currentTarget) e.currentTarget.close(); }}
         >
             <div className="icon-picker-body">
-                <h2 id={`${id}-title`}>Insert icon</h2>
+                <h2 id={`${id}-title`}>{choosing ? 'Choose icon' : 'Insert icon'}</h2>
                 <div className="icon-picker-controls">
                     {packs.length > 1 && (
                         <select
@@ -223,7 +231,7 @@ const IconPicker: React.FC<Props> = ({ packs, code, onInsert, onClose }) => {
                 )}
                 <div className="icon-picker-actions">
                     <button type="button" className="icon-picker-primary" onClick={() => insert()} disabled={!selected || !canInsert} aria-describedby={canInsert ? undefined : hintId}>
-                        Insert into diagram
+                        {choosing ? 'Use this icon' : 'Insert into diagram'}
                     </button>
                     <button type="button" className="example-btn" onClick={() => void copyName()} disabled={!selected}>Copy name</button>
                     <button type="button" className="example-btn" onClick={() => dialogRef.current?.close()}>Close</button>

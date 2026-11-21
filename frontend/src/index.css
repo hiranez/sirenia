@@ -38,6 +38,8 @@ body {
   border-right: 1px solid rgba(148, 163, 184, 0.2);
   box-sizing: border-box;
   gap: 16px;
+  /* Scrolls on its own, so the preview stays in view while editing or building. */
+  overflow-y: auto;
 }
 
 .brand-block h1 {
@@ -150,6 +152,8 @@ body {
 
 .preview-container {
   flex: 1;
+  /* A wide diagram scrolls in the preview instead of squeezing the sidebar. */
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: #f8fafc;
@@ -613,6 +617,312 @@ body {
   .icon-picker-preview {
     height: 170px;
   }
+}
+
+/* Code / Build tabs above the editor */
+.editor-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+  margin-bottom: -8px;
+}
+
+.editor-tab {
+  padding: 8px 18px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.editor-tab:hover {
+  color: #e2e8f0;
+}
+
+.editor-tab.active {
+  color: #e0e7ff;
+  background: #0b1223;
+  border-color: rgba(148, 163, 184, 0.3);
+  border-bottom: 1px solid #0b1223;
+}
+
+.editor-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
+}
+
+.editor-panel[hidden] {
+  display: none;
+}
+
+/* Visual builder: text only (labels, icon names); icons are drawn only in the preview. */
+.builder {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.builder h3 {
+  margin: 0;
+  font-size: 13px;
+  color: #a5b4fc;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.builder code {
+  font-size: 11px;
+  color: #a5b4fc;
+  overflow-wrap: anywhere;
+}
+
+.builder-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.builder-toolbar-history {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.builder .example-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.builder button:focus-visible,
+.builder select:focus-visible,
+.builder input:focus-visible,
+.builder summary:focus-visible,
+.builder-outline-row:focus-visible,
+.editor-tab:focus-visible {
+  outline: 2px solid #a5b4fc;
+  outline-offset: 2px;
+}
+
+.builder-notice {
+  margin: -6px 0 0 0;
+  min-height: 18px;
+  font-size: 12px;
+  color: #6ee7b7;
+}
+
+.builder-empty,
+.builder-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 10px;
+}
+
+.builder-empty p,
+.builder-confirm p {
+  margin: 0;
+}
+
+.builder-confirm {
+  background: rgba(251, 191, 36, 0.08);
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fde68a;
+}
+
+.builder-outline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 10px;
+  background: #0b1223;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 10px;
+}
+
+.builder-outline ul {
+  list-style: none;
+  margin: 0 0 6px 0;
+  padding: 0;
+}
+
+.builder-outline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #e2e8f0;
+}
+
+.builder-outline-row:hover {
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.builder-outline-row.selected {
+  background: rgba(99, 102, 241, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(165, 180, 252, 0.6);
+}
+
+.builder-outline-kind {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+}
+
+.builder-outline-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.builder-outline-note {
+  font-size: 11px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.builder-hint,
+.builder-unmanaged {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.builder-unmanaged {
+  color: #fcd34d;
+}
+
+.builder-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: rgba(51, 65, 85, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 10px;
+}
+
+.builder-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.builder-fieldset {
+  margin: 0;
+  padding: 8px 10px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.builder-fieldset legend {
+  padding: 0 4px;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.builder-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.builder-row select {
+  flex: 1 1 140px;
+}
+
+.builder-form input,
+.builder-form select {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  background: #0b1223;
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.builder-form [aria-invalid="true"] {
+  border-color: rgba(248, 113, 113, 0.8);
+}
+
+.builder-error {
+  margin: 0;
+  color: #fecdd3;
+  background: rgba(248, 113, 113, 0.08);
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+}
+
+.builder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.builder .builder-danger {
+  color: #fecdd3;
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.builder-code summary {
+  cursor: pointer;
+  color: #a5b4fc;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.builder-code pre {
+  margin: 8px 0 0 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 10px 12px;
+  background: #0b1223;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 12px;
+  color: #e2e8f0;
+  white-space: pre;
+}
+
+/* Nodes are picked by clicking in the preview while building; the outline is drawn around them. */
+.mermaid-preview.selectable {
+  cursor: pointer;
 }
 
 /* Terms of Service Footer */

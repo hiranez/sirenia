@@ -6,7 +6,10 @@ import { isPng, readPngText, MAX_SOURCE_LENGTH, SOURCE_KEYS } from '../utils/png
 import { branding } from '../branding';
 import { composeFooterNotice, fetchPack, loadPackIndex, type PackEntry } from '../utils/iconPacks';
 import { insertIcon, type CatalogEntry } from '../utils/iconPicker';
+import { canRedo, canUndo, createHistory, record, redo, undo, type History } from '../utils/history';
+import { nodeAt, showSelection } from '../utils/architecturePreview';
 import IconPicker from './IconPicker';
+import ArchitectureBuilder, { type BuilderSelection } from './ArchitectureBuilder';
 import '../index.css'; // Ensure styles are loaded
 
 // Example diagrams for quick start. `requiresPack`: shown only when that icon pack is installed.
@@ -88,14 +91,26 @@ const exportMessage = (elapsedSeconds: number): string => {
     return 'Trying once more. Thank you for your patience.';
 };
 
-const DiagramEditor: React.FC = () => {
-    const [code, setCode] = useState<string>(
-        `graph TD;
+const INITIAL_CODE = `graph TD;
   A-->B;
   A-->C;
   B-->D;
-  C-->D;`
-    );
+  C-->D;`;
+
+const TABS = [{ id: 'code', label: 'Code' }, { id: 'build', label: 'Build' }] as const;
+type Tab = typeof TABS[number]['id'];
+
+const DiagramEditor: React.FC = () => {
+    const [code, setCode] = useState<string>(INITIAL_CODE);
+    // Undo/redo over the code: builder actions and icon insertions are steps, typing is coalesced.
+    const [history, setHistory] = useState<History>(() => createHistory(INITIAL_CODE));
+    const [tab, setTab] = useState<Tab>('code');
+    const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ code: null, build: null });
+    const [selection, setSelection] = useState<BuilderSelection | null>(null);
+    // Counts finished preview renders, so the selection outline is drawn again on each new SVG.
+    const [renders, setRenders] = useState(0);
+    // The icon picker in choosing mode (the builder's icon field), and the button that opened it.
+    const [choosing, setChoosing] = useState<{ onChoose: (prefix: string, entry: CatalogEntry) => void; opener: HTMLElement } | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [downloadFormat, setDownloadFormat] = useState<'png' | 'svg'>('svg');
@@ -365,6 +380,7 @@ const DiagramEditor: React.FC = () => {
                     svgInDOM.style.maxHeight = 'none';
                     svgInDOM.style.width = 'auto';
                     svgInDOM.style.height = 'auto';
+                    setRenders((n) => n + 1);
                 } else {
                     console.warn('[WARNING] No SVG found in rendered content!');
                 }
@@ -440,11 +456,51 @@ const DiagramEditor: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
     }, []);
 
-    const editCode = (next: string) => {
+    // `typedAt`: the time of a keystroke in the code field (coalesced into one undo step); null otherwise.
+    const remember = (next: string, typedAt: number | null = null) => setHistory((h) => record(h, next, typedAt));
+
+    const editCode = (next: string, typedAt: number | null = null) => {
         setCode(next);
+        remember(next, typedAt);
         if (wakeEngine() && engine !== 'ready') {
             setEngine('warming');
         }
+    };
+
+    const builderEdit = (next: string) => {
+        caretRef.current = null;
+        editCode(next);
+    };
+
+    const stepHistory = (step: (h: History) => History) => {
+        const next = step(record(history, code));
+        setHistory(next);
+        caretRef.current = null;
+        setCode(next.present);
+    };
+
+    // The selection outline in the preview, drawn again after every render; only while building.
+    useEffect(() => {
+        const svg = previewRef.current?.querySelector('svg');
+        if (svg) showSelection(svg, tab === 'build' && selection?.kind === 'node' ? selection.id : null);
+    }, [renders, selection, tab]);
+
+    // In the Build tab a click on a service, group or junction of the preview selects it.
+    const onPreviewClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        const svg = previewRef.current?.querySelector('svg');
+        if (tab !== 'build' || !svg) return;
+        const id = nodeAt(svg, e.target, e.clientX, e.clientY);
+        setSelection(id === null ? null : { kind: 'node', id });
+    };
+
+    const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+        const at = TABS.findIndex((t) => t.id === tab);
+        const to = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: TABS.length - 1 }[e.key];
+        if (to === undefined) return;
+        e.preventDefault();
+        const next = TABS[(to + TABS.length) % TABS.length].id;
+        setTab(next);
+        tabRefs.current[next]?.focus();
     };
 
     // Setting the text moves the caret to the end of the field; put it back where the icon was added.
@@ -465,6 +521,12 @@ const DiagramEditor: React.FC = () => {
 
     const closePicker = () => {
         setPickerOpen(false);
+        // Choosing for the builder: focus goes back to the button that opened the picker.
+        if (choosing) {
+            setChoosing(null);
+            choosing.opener.focus();
+            return;
+        }
         const field = codeRef.current;
         if (!field) return;
         field.focus();
@@ -565,6 +627,7 @@ const DiagramEditor: React.FC = () => {
             if (extracted) {
                 caretRef.current = null;
                 setCode(extracted);
+                remember(extracted);
                 setUploadError(null);
                 setError(null);
             } else {
@@ -666,19 +729,53 @@ const DiagramEditor: React.FC = () => {
                         </label>
                     </div>
                 </div>
-                {installedPacks.length > 0 && (
-                    <div className="code-tools">
-                        <button type="button" className="example-btn" onClick={() => setPickerOpen(true)}>Insert icon…</button>
-                    </div>
-                )}
-                <textarea
-                    ref={codeRef}
-                    className="code-editor"
-                    value={code}
-                    onChange={(e) => { caretRef.current = e.target.selectionEnd; editCode(e.target.value); }}
-                    onSelect={(e) => { caretRef.current = e.currentTarget.selectionEnd; }}
-                    placeholder="Enter Mermaid code here..."
-                />
+                <div className="editor-tabs" role="tablist" aria-label="Editor">
+                    {TABS.map((t) => (
+                        <button
+                            key={t.id}
+                            ref={(el) => { tabRefs.current[t.id] = el; }}
+                            type="button"
+                            role="tab"
+                            id={`editor-tab-${t.id}`}
+                            aria-selected={tab === t.id}
+                            aria-controls={`editor-panel-${t.id}`}
+                            tabIndex={tab === t.id ? 0 : -1}
+                            className={tab === t.id ? 'editor-tab active' : 'editor-tab'}
+                            onClick={() => setTab(t.id)}
+                            onKeyDown={onTabKeyDown}
+                        >
+                            {t.label}
+                        </button>
+                    ))}
+                </div>
+                <div id="editor-panel-code" role="tabpanel" aria-labelledby="editor-tab-code" className="editor-panel" hidden={tab !== 'code'}>
+                    {installedPacks.length > 0 && (
+                        <div className="code-tools">
+                            <button type="button" className="example-btn" onClick={() => setPickerOpen(true)}>Insert icon…</button>
+                        </div>
+                    )}
+                    <textarea
+                        ref={codeRef}
+                        className="code-editor"
+                        value={code}
+                        onChange={(e) => { caretRef.current = e.target.selectionEnd; editCode(e.target.value, e.timeStamp); }}
+                        onSelect={(e) => { caretRef.current = e.currentTarget.selectionEnd; }}
+                        placeholder="Enter Mermaid code here..."
+                    />
+                </div>
+                <div id="editor-panel-build" role="tabpanel" aria-labelledby="editor-tab-build" className="editor-panel" hidden={tab !== 'build'}>
+                    <ArchitectureBuilder
+                        code={code}
+                        onEdit={builderEdit}
+                        selection={selection}
+                        onSelect={setSelection}
+                        canUndo={canUndo(history)}
+                        canRedo={canRedo(history)}
+                        onUndo={() => stepHistory(undo)}
+                        onRedo={() => stepHistory(redo)}
+                        onChooseIcon={installedPacks.length > 0 ? (onChoose, opener) => setChoosing({ onChoose, opener }) : undefined}
+                    />
+                </div>
                 <div className="action-row">
                     <button className="download-btn" onClick={handleDownload} disabled={isDownloading} aria-busy={isDownloading}>
                         {isDownloading ? 'Rendering…' : 'Download Secure Image'}
@@ -738,8 +835,8 @@ const DiagramEditor: React.FC = () => {
                     )}
                 </div>
             </div>
-            {pickerOpen && installedPacks.length > 0 && (
-                <IconPicker packs={installedPacks} code={code} onInsert={insertPackIcon} onClose={closePicker} />
+            {(pickerOpen || choosing) && installedPacks.length > 0 && (
+                <IconPicker packs={installedPacks} code={code} onInsert={insertPackIcon} onChoose={choosing?.onChoose} onClose={closePicker} />
             )}
             <div className="preview-container">
                 <div className="preview-toolbar">
@@ -772,7 +869,12 @@ const DiagramEditor: React.FC = () => {
                     </div>
                 </div>
                 <div className="preview-pane" ref={containerRef}>
-                    <div ref={previewRef} className="mermaid-preview" style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }} />
+                    <div
+                        ref={previewRef}
+                        className={tab === 'build' ? 'mermaid-preview selectable' : 'mermaid-preview'}
+                        style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }}
+                        onClick={onPreviewClick}
+                    />
                 </div>
             </div>
         </div>

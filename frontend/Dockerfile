@@ -33,7 +33,7 @@ RUN npm ci --omit=dev --no-audit --no-fund \
            /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
            /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-*
 COPY --from=build /app/dist ./dist
-COPY auth-proxy.js upstream.js ./
+COPY auth-proxy.js upstream.js packRecipes.js ./
 
 # Drop privileges: run as the built-in non-root 'node' user.
 USER node

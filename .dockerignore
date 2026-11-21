@@ -29,6 +29,7 @@
 !frontend/branding/
 !frontend/auth-proxy.js
 !frontend/upstream.js
+!frontend/packRecipes.js
 
 # The packs command, its index builder and the Google Cloud generator; recipes as text only.
 !scripts/packs.mjs

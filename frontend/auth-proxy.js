@@ -16,6 +16,8 @@ import axios from 'axios';
 import rateLimit from 'express-rate-limit';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import { discoverRecipes, recipesRoot } from './packRecipes.js';
 import { backendAuthHeaders, callWithRetry, isSameOriginRequest, proxySettings, warmupDecision } from './upstream.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -264,6 +266,24 @@ app.use(
     return res.set('Cache-Control', 'no-cache').json({ format: 1, packs: [] });
   }
 );
+
+// Which pack recipes this installation offers, so the editor can explain how to add a pack. Read
+// once at start. A hosted edition has no recipes next to it: the list is empty and the editor shows
+// no install instructions. Fixed answer: nothing is derived from the request.
+const EDITOR_VERSION = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).version;
+  } catch {
+    return null;
+  }
+})();
+const RECIPES = discoverRecipes(recipesRoot(process.env, __dirname), console.warn);
+// The version only serves the install commands, so an installation without recipes does not publish it.
+const PACK_RECIPES = { format: 1, version: RECIPES.length ? EDITOR_VERSION : null, recipes: RECIPES };
+app.all('/pack-recipes.json', (req, res) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(404).json({ error: 'Not found' });
+  return res.set('Cache-Control', 'no-cache').json(PACK_RECIPES);
+});
 
 // Unknown API paths answer in the API's JSON shape, whatever the method.
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));

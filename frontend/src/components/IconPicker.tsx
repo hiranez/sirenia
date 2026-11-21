@@ -19,12 +19,14 @@ interface Props {
     onInsert: (prefix: string, entry: CatalogEntry) => boolean;
     /** Choosing mode (the builder's icon field): returns the entry and closes; nothing is inserted. */
     onChoose?: (prefix: string, entry: CatalogEntry) => void;
+    /** Opens the "How to add an icon pack" help; absent when this installation offers no recipes. */
+    onAddPack?: () => void;
     onClose: () => void;
 }
 
 // Searchable list of the icons of an installed pack, by official product name. The list is text
 // only: an icon is drawn only inside the rendered one-node diagram of the selected entry.
-const IconPicker: React.FC<Props> = ({ packs, code, onInsert, onChoose, onClose }) => {
+const IconPicker: React.FC<Props> = ({ packs, code, onInsert, onChoose, onAddPack, onClose }) => {
     const id = useId();
     const dialogRef = useRef<HTMLDialogElement>(null);
     const searchRef = useRef<HTMLInputElement>(null);
@@ -228,6 +230,9 @@ const IconPicker: React.FC<Props> = ({ packs, code, onInsert, onChoose, onClose 
                         {pack.label} icons are subject to {pack.owner}'s{' '}
                         <a href={pack.termsUrl} target="_blank" rel="noopener noreferrer">terms of use</a>.
                     </p>
+                )}
+                {onAddPack && (
+                    <button type="button" className="icon-picker-add-pack" onClick={() => { onAddPack(); dialogRef.current?.close(); }}>Add another pack…</button>
                 )}
                 <div className="icon-picker-actions">
                     <button type="button" className="icon-picker-primary" onClick={() => insert()} disabled={!selected || !canInsert} aria-describedby={canInsert ? undefined : hintId}>

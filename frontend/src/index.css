@@ -619,6 +619,136 @@ body {
   }
 }
 
+/* "How to add an icon pack": same dialog look as the icon picker, text only. */
+.pack-help {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.pack-help-scroll {
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.pack-help-scroll p {
+  margin: 0 0 10px;
+}
+
+.pack-help h3 {
+  margin: 16px 0 6px;
+  font-size: 15px;
+  color: #c7d2fe;
+}
+
+.pack-help ol {
+  margin: 0;
+  padding-left: 22px;
+}
+
+.pack-help li {
+  margin-bottom: 8px;
+}
+
+.pack-help code {
+  font-size: 12px;
+  color: #a5b4fc;
+}
+
+.pack-help-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 10px;
+}
+
+.pack-help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.pack-help-caption {
+  text-align: left;
+  font-size: 12px;
+  color: #94a3b8;
+  padding-bottom: 4px;
+}
+
+.pack-help-table th,
+.pack-help-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.pack-help-table th {
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.pack-help-command {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px 8px;
+  margin-top: 4px;
+}
+
+.pack-help-command pre {
+  flex: 1 1 320px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 10px;
+  background: #0b1223;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pack-help-command code {
+  color: #e2e8f0;
+}
+
+.pack-help-copy-state {
+  flex-basis: 100%;
+  min-height: 16px;
+  font-size: 12px;
+  color: #6ee7b7;
+}
+
+.pack-help-scroll .pack-help-note {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* A button that reads as a link, inside a sentence. */
+.link-btn {
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: #4A90E2;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link-btn:focus-visible {
+  outline: 2px solid #a5b4fc;
+  outline-offset: 2px;
+}
+
+.icon-picker-add-pack {
+  align-self: flex-start;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: #a5b4fc;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* Code / Build tabs above the editor */
 .editor-tabs {
   display: flex;

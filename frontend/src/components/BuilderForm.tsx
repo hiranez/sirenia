@@ -21,6 +21,8 @@ interface Props {
     target: FormTarget;
     /** Opens the icon picker in choosing mode (focus goes back to `opener`); absent when no pack is installed. */
     onChooseIcon?: (onChoose: (prefix: string, entry: CatalogEntry) => void, opener: HTMLElement) => void;
+    /** Opens the "How to add an icon pack" help (focus goes back to `opener`); offered when no pack is installed. */
+    onAddPack?: (opener: HTMLElement) => void;
     onDone: Done;
     onCancel: () => void;
 }
@@ -37,7 +39,7 @@ const ICON_TEXT = ':text';
 
 // Editor of one group, service, junction or connection. Values are text in form fields; the icon is
 // a name (`cloud`, `gcp:cloud-run`), never a picture.
-const BuilderForm: React.FC<Props> = ({ code, model, target, onChooseIcon, onDone, onCancel }) => {
+const BuilderForm: React.FC<Props> = ({ code, model, target, onChooseIcon, onAddPack, onDone, onCancel }) => {
     const id = useId();
     const [error, setError] = useState<EditError | null>(null);
     const adding = target.mode === 'add';
@@ -156,6 +158,7 @@ const BuilderForm: React.FC<Props> = ({ code, model, target, onChooseIcon, onDon
                                         {iconOptions.map((name) => <option key={name} value={name}>{name}</option>)}
                                     </select>
                                     {onChooseIcon && <button data-field="choose" type="button" className="example-btn" onClick={choose}>Choose from a pack…</button>}
+                                    {!onChooseIcon && onAddPack && <button data-field="add-pack" type="button" className="example-btn" onClick={(e) => onAddPack(e.currentTarget)}>Add an icon pack…</button>}
                                 </div>
                             </div>
                         </>

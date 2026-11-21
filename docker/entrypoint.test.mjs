@@ -3,11 +3,13 @@
 // by the local-image CI job.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  backendEnv, exitStatus, layout, parseArgs, proxyEnv, serveSettings, stoppedCleanly,
+  backendEnv, exitStatus, installedPrefixes, layout, packsHint, parseArgs, proxyEnv, serveSettings, stoppedCleanly,
 } from './entrypoint.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -105,4 +107,31 @@ test('the command line answers --help, --version and usage errors without starti
   const badPort = spawnSync(process.execPath, [launcher, 'serve'], { encoding: 'utf8', timeout: 10000, env: { ...process.env, PORT: 'x' } });
   assert.equal(badPort.status, 1);
   assert.match(badPort.stderr, /PORT must be an integer/);
+});
+
+test('start-up hint: installed packs are listed; with none, and recipes, it says how to add one', () => {
+  const recipes = [{ prefix: 'demo' }, { prefix: 'other' }];
+  assert.equal(packsHint({ installed: ['demo', 'mine'], recipes, version: '1.4.0' }), 'Icon packs installed: demo, mine');
+  assert.equal(packsHint({ installed: ['mine'], recipes: [], version: '1.4.0' }), 'Icon packs installed: mine');
+  const hint = packsHint({ installed: [], recipes, version: '1.4.0' });
+  assert.match(hint, /^No icon pack is installed\. To add one, run: docker run --rm -it -v sirenia-packs:\/packs ghcr\.io\/hiranez\/sirenia:1\.4\.0 packs add demo\n/);
+  assert.match(hint, /restart this container.*README, section "Icon packs"/);
+  assert.equal(hint.split('\n').length, 2);
+});
+
+test('start-up hint: nothing to say without packs and recipes; an unusable version is a placeholder', () => {
+  assert.equal(packsHint({ installed: [], recipes: [], version: '1.4.0' }), null);
+  assert.match(packsHint({ installed: [], recipes: [{ prefix: 'demo' }], version: 'unknown' }), /sirenia:<version> packs add demo/);
+});
+
+test('installed packs come from the index in the packs directory; any problem means none', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sirenia-packs-'));
+  assert.deepEqual(installedPrefixes(dir), []);
+  assert.deepEqual(installedPrefixes(path.join(dir, 'missing')), []);
+  fs.writeFileSync(path.join(dir, 'index.json'), '{ not json');
+  assert.deepEqual(installedPrefixes(dir), []);
+  fs.writeFileSync(path.join(dir, 'index.json'), JSON.stringify({ format: 1, packs: [{ prefix: 'demo' }, { file: 'x.json' }, null, { prefix: 5 }] }));
+  assert.deepEqual(installedPrefixes(dir), ['demo']);
+  fs.writeFileSync(path.join(dir, 'index.json'), JSON.stringify({ format: 1, packs: 'x' }));
+  assert.deepEqual(installedPrefixes(dir), []);
 });

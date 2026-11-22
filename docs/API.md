@@ -97,7 +97,7 @@ const png = Buffer.from(await res.arrayBuffer());
 
 ## The source inside an export
 
-Every export carries the diagram source, so it can be edited again. The editor's "Restore from Exported SVG or PNG" reads it back.
+Every export carries the diagram source, so it can be edited again. The editor's "Restore from export..." reads it back.
 
 ### SVG
 

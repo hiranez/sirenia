@@ -4,6 +4,14 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- New editor layout: a top bar holds the product name, an "Examples" menu, "Restore from export...", the SVG or PNG choice, the download button and an "About" button, so the code field and the visual builder use the full height of the window. The feature list, the API note and the contact details moved into an About dialog. The privacy line, the icon pack notices and the "based on" credit stay in a footer at the bottom of the page. Export progress, the "downloaded" message and export errors appear under the download button instead of in the editor column.
+
+### Fixed
+
+- The API note in the editor showed the example diagram as `A--&gt;B;`; it now reads `A-->B;`.
+
 ## [1.5.0] - 2026-11-21
 
 ### Added

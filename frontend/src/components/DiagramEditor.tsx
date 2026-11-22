@@ -11,6 +11,8 @@ import { canRedo, canUndo, createHistory, record, redo, undo, type History } fro
 import { nodeAt, showSelection } from '../utils/architecturePreview';
 import IconPicker from './IconPicker';
 import PackHelp from './PackHelp';
+import AboutDialog from './AboutDialog';
+import MenuButton from './MenuButton';
 import ArchitectureBuilder, { type BuilderSelection } from './ArchitectureBuilder';
 import '../index.css'; // Ensure styles are loaded
 
@@ -134,6 +136,8 @@ const DiagramEditor: React.FC = () => {
     // The pack recipes this installation offers (empty on a hosted edition, which bundles its packs),
     // and the "How to add an icon pack" help with the element that opened it.
     const [recipeInfo, setRecipeInfo] = useState<RecipeInfo | null>(null);
+    const [aboutOpen, setAboutOpen] = useState(false);
+    const aboutButtonRef = useRef<HTMLButtonElement>(null);
     const [helpOpener, setHelpOpener] = useState<HTMLElement | null | undefined>(undefined); // undefined = closed
     const insertButtonRef = useRef<HTMLButtonElement>(null);
     // Set while the picker hands over to the help, so that closing the picker does not take the focus.
@@ -662,9 +666,6 @@ const DiagramEditor: React.FC = () => {
         }
     };
 
-    // A build with a contact address is a commercial edition and shows its sales copy.
-    const commercial = Boolean(branding.contactEmail);
-
     const installedPacks = packs ?? [];
     // The help is offered only where recipes exist; a hosted edition has none.
     const recipes = recipeInfo?.recipes ?? [];
@@ -677,7 +678,10 @@ const DiagramEditor: React.FC = () => {
         else codeRef.current?.focus();
     };
     const hasPack = (prefix: string) => installedPacks.some((p) => p.prefix === prefix);
-    const otherPacks = installedPacks.filter((p) => p.prefix !== 'gcp');
+    const closeAbout = () => {
+        setAboutOpen(false);
+        aboutButtonRef.current?.focus();
+    };
     const examples = EXAMPLES.filter((example) => !example.requiresPack || hasPack(example.requiresPack));
     // One footer paragraph per installed pack that has a notice (vendor wording from the pack,
     // product wording from the branding).
@@ -687,193 +691,191 @@ const DiagramEditor: React.FC = () => {
     });
 
     return (
-        <div className="editor-container">
-            <div className="sidebar">
-                <div className="brand-block">
-                    <h1>{branding.productName}</h1>
-                    <p className="tagline">{commercial
-                        ? 'Enterprise Mermaid rendering with provenance tracking. Try the API or use the editor below.'
-                        : 'Mermaid diagrams as self-contained SVG and PNG files, with the source embedded. Use the editor below or the API.'}</p>
-                </div>
-                <div className="info-section">
-                    <div className="info-header">{commercial ? '🏢 Enterprise Features' : 'Features'}</div>
-                    <ul className="info-list">
-                        <li><strong>API Access:</strong> POST to /api/generate for programmatic rendering</li>
-                        <li><strong>Metadata Injection:</strong> Source code embedded in every export</li>
-                        <li><strong>Audit Trail:</strong> Recover original Mermaid from any exported file</li>
-                        {hasPack('gcp') && (
-                            <li><strong>Google Cloud diagrams:</strong> Official Google Cloud product icons via the <code>gcp:</code> icon pack (see the "Google Cloud Architecture" example)</li>
-                        )}
-                        {otherPacks.length > 0 && (
-                            <li><strong>Icon packs:</strong> {otherPacks.map((p, i) => (
-                                <React.Fragment key={p.prefix}>{i > 0 && ', '}{p.label} (<code>{p.prefix}:</code>)</React.Fragment>
-                            ))}</li>
-                        )}
-                        {packs !== null && installedPacks.length === 0 && (
-                            <li><strong>Cloud provider icons:</strong> {canAddPack
-                                ? <button type="button" className="link-btn" onClick={(e) => openHelp(e.currentTarget)}>add an icon pack</button>
-                                : 'add an icon pack'} to draw with a vendor's official product icons</li>
-                        )}
-                        <li><strong>Rate Limited:</strong> 20 req/min{commercial && ' - contact us for enterprise quotas'}</li>
-                    </ul>
-                    {branding.contactEmail && (
-                        <div className="info-warning">
-                            <strong>💼 Need higher limits or self-hosting?</strong> Contact us at <a href={`mailto:${branding.contactEmail}`} style={{color: '#4A90E2'}}>{branding.contactEmail}</a> for enterprise licensing.
-                        </div>
+        <div className="editor-shell">
+            <header className="topbar">
+                <h1 className="topbar-brand">{branding.productName}</h1>
+                <MenuButton
+                    id="examples-button"
+                    menuId="examples-menu"
+                    label="Examples"
+                    items={examples}
+                    itemKey={(example) => example.name}
+                    itemLabel={(example) => example.name}
+                    onPick={(example) => { caretRef.current = null; editCode(example.code); }}
+                />
+                <label className="upload-btn" title="Load the Mermaid code back from an SVG or PNG exported by this tool">
+                    Restore from export…
+                    <input type="file" accept=".svg,.png" onChange={handleExportUpload} />
+                </label>
+                <div className="topbar-spacer" />
+                <div className="topbar-export">
+                    {exportState.phase === 'idle' && engine !== 'unknown' && (
+                        <p className={`engine-hint ${engine}`}>
+                            {engine === 'ready' ? 'Render engine ready.' : 'Waking the render engine so your first export is quick…'}
+                        </p>
                     )}
-                </div>
-                <div className="control-row">
-                    <label className="control-label">Quick Start Examples</label>
-                    <div className="example-buttons">
-                        {examples.map((example) => (
-                            <button
-                                key={example.name}
-                                className="example-btn"
-                                onClick={() => { caretRef.current = null; editCode(example.code); }}
-                                title={`Load ${example.name} template`}
-                            >
-                                {example.name}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-                <div className="control-row">
-                    <label className="control-label">Download format</label>
-                    <div className="control-group">
-                        <label className="radio-pill">
-                            <input
-                                type="radio"
-                                name="format"
-                                value="png"
-                                checked={downloadFormat === 'png'}
-                                onChange={() => setDownloadFormat('png')}
-                            />
-                            <span>PNG (metadata)</span>
-                        </label>
-                        <label className="radio-pill">
-                            <input
-                                type="radio"
-                                name="format"
-                                value="svg"
-                                checked={downloadFormat === 'svg'}
-                                onChange={() => setDownloadFormat('svg')}
-                            />
+                    <div className="format-toggle" role="radiogroup" aria-label="Download format">
+                        <label>
+                            <input type="radio" name="format" value="svg" checked={downloadFormat === 'svg'} onChange={() => setDownloadFormat('svg')} />
                             <span>SVG</span>
                         </label>
+                        <label>
+                            <input type="radio" name="format" value="png" checked={downloadFormat === 'png'} onChange={() => setDownloadFormat('png')} />
+                            <span>PNG</span>
+                        </label>
                     </div>
-                </div>
-                <div className="editor-tabs" role="tablist" aria-label="Editor">
-                    {TABS.map((t) => (
-                        <button
-                            key={t.id}
-                            ref={(el) => { tabRefs.current[t.id] = el; }}
-                            type="button"
-                            role="tab"
-                            id={`editor-tab-${t.id}`}
-                            aria-selected={tab === t.id}
-                            aria-controls={`editor-panel-${t.id}`}
-                            tabIndex={tab === t.id ? 0 : -1}
-                            className={tab === t.id ? 'editor-tab active' : 'editor-tab'}
-                            onClick={() => setTab(t.id)}
-                            onKeyDown={onTabKeyDown}
-                        >
-                            {t.label}
-                        </button>
-                    ))}
-                </div>
-                <div id="editor-panel-code" role="tabpanel" aria-labelledby="editor-tab-code" className="editor-panel" hidden={tab !== 'code'}>
-                    {installedPacks.length > 0 && (
-                        <div className="code-tools">
-                            <button ref={insertButtonRef} type="button" className="example-btn" onClick={() => setPickerOpen(true)}>Insert icon…</button>
-                        </div>
-                    )}
-                    {installedPacks.length === 0 && canAddPack && (
-                        <div className="code-tools">
-                            <button type="button" className="example-btn" onClick={(e) => openHelp(e.currentTarget)}>Add an icon pack…</button>
-                        </div>
-                    )}
-                    <textarea
-                        ref={codeRef}
-                        className="code-editor"
-                        value={code}
-                        onChange={(e) => { caretRef.current = e.target.selectionEnd; editCode(e.target.value, e.timeStamp); }}
-                        onSelect={(e) => { caretRef.current = e.currentTarget.selectionEnd; }}
-                        placeholder="Enter Mermaid code here..."
-                    />
-                </div>
-                <div id="editor-panel-build" role="tabpanel" aria-labelledby="editor-tab-build" className="editor-panel" hidden={tab !== 'build'}>
-                    <ArchitectureBuilder
-                        code={code}
-                        onEdit={builderEdit}
-                        selection={selection}
-                        onSelect={setSelection}
-                        canUndo={canUndo(history)}
-                        canRedo={canRedo(history)}
-                        onUndo={() => stepHistory(undo)}
-                        onRedo={() => stepHistory(redo)}
-                        onChooseIcon={installedPacks.length > 0 ? (onChoose, opener) => setChoosing({ onChoose, opener }) : undefined}
-                        onAddPack={installedPacks.length === 0 && canAddPack ? openHelp : undefined}
-                    />
-                </div>
-                <div className="action-row">
                     <button className="download-btn" onClick={handleDownload} disabled={isDownloading} aria-busy={isDownloading}>
                         {isDownloading ? 'Rendering…' : 'Download Secure Image'}
                     </button>
-                    <label className="upload-btn" title="Only works with SVG or PNG files exported from this tool">
-                        📤 Restore from Exported SVG or PNG
-                        <input type="file" accept=".svg,.png" onChange={handleExportUpload} />
-                    </label>
+                    <button type="button" id="about-button" ref={aboutButtonRef} className="example-btn" onClick={() => setAboutOpen(true)}>About</button>
                 </div>
-                {exportState.phase === 'working' && (
-                    <div className="export-status">
-                        <div
-                            className="export-progress"
-                            role="progressbar"
-                            aria-label="Export progress"
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                            aria-valuenow={exportProgress(exportElapsed, engine === 'ready' ? EXPECTED_SECONDS.ready : EXPECTED_SECONDS.cold)}
-                        >
-                            <div
-                                className="export-progress-fill"
-                                style={{ width: `${exportProgress(exportElapsed, engine === 'ready' ? EXPECTED_SECONDS.ready : EXPECTED_SECONDS.cold)}%` }}
-                            />
+                {exportState.phase !== 'idle' && (
+                    <div className="export-popover">
+                        {exportState.phase === 'working' && (
+                            <div className="export-status">
+                                <div
+                                    className="export-progress"
+                                    role="progressbar"
+                                    aria-label="Export progress"
+                                    aria-valuemin={0}
+                                    aria-valuemax={100}
+                                    aria-valuenow={exportProgress(exportElapsed, engine === 'ready' ? EXPECTED_SECONDS.ready : EXPECTED_SECONDS.cold)}
+                                >
+                                    <div
+                                        className="export-progress-fill"
+                                        style={{ width: `${exportProgress(exportElapsed, engine === 'ready' ? EXPECTED_SECONDS.ready : EXPECTED_SECONDS.cold)}%` }}
+                                    />
+                                </div>
+                                <p className="export-message" role="status" aria-live="polite">{exportMessage(exportElapsed)}</p>
+                            </div>
+                        )}
+                        {exportState.phase === 'done' && (
+                            <div className="export-status export-done" role="status">✓ {exportState.filename} downloaded.</div>
+                        )}
+                        {exportState.phase === 'error' && (
+                            <div className="error-box export-error" role="alert">
+                                <span>{exportState.message}</span>
+                                {exportState.retryable && (
+                                    <button className="retry-btn" onClick={handleDownload}>Try again</button>
+                                )}
+                                <button className="retry-btn" onClick={() => setExportState({ phase: 'idle' })}>Dismiss</button>
+                                {exportState.requestId && (
+                                    <span className="export-reference">Reference: {exportState.requestId}</span>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </header>
+            <div className="workspace">
+                <section className="editor-pane" aria-label="Editor">
+                    <div className="editor-tabs" role="tablist" aria-label="Editor">
+                        {TABS.map((t) => (
+                            <button
+                                key={t.id}
+                                ref={(el) => { tabRefs.current[t.id] = el; }}
+                                type="button"
+                                role="tab"
+                                id={`editor-tab-${t.id}`}
+                                aria-selected={tab === t.id}
+                                aria-controls={`editor-panel-${t.id}`}
+                                tabIndex={tab === t.id ? 0 : -1}
+                                className={tab === t.id ? 'editor-tab active' : 'editor-tab'}
+                                onClick={() => setTab(t.id)}
+                                onKeyDown={onTabKeyDown}
+                            >
+                                {t.label}
+                            </button>
+                        ))}
+                    </div>
+                    <div id="editor-panel-code" role="tabpanel" aria-labelledby="editor-tab-code" className="editor-panel" hidden={tab !== 'code'}>
+                        {installedPacks.length > 0 && (
+                            <div className="code-tools">
+                                <button ref={insertButtonRef} type="button" className="example-btn" onClick={() => setPickerOpen(true)}>Insert icon…</button>
+                            </div>
+                        )}
+                        {installedPacks.length === 0 && canAddPack && (
+                            <div className="code-tools">
+                                <button type="button" className="example-btn" onClick={(e) => openHelp(e.currentTarget)}>Add an icon pack…</button>
+                            </div>
+                        )}
+                        <textarea
+                            ref={codeRef}
+                            className="code-editor"
+                            value={code}
+                            onChange={(e) => { caretRef.current = e.target.selectionEnd; editCode(e.target.value, e.timeStamp); }}
+                            onSelect={(e) => { caretRef.current = e.currentTarget.selectionEnd; }}
+                            placeholder="Enter Mermaid code here..."
+                        />
+                    </div>
+                    <div id="editor-panel-build" role="tabpanel" aria-labelledby="editor-tab-build" className="editor-panel" hidden={tab !== 'build'}>
+                        <ArchitectureBuilder
+                            code={code}
+                            onEdit={builderEdit}
+                            selection={selection}
+                            onSelect={setSelection}
+                            canUndo={canUndo(history)}
+                            canRedo={canRedo(history)}
+                            onUndo={() => stepHistory(undo)}
+                            onRedo={() => stepHistory(redo)}
+                            onChooseIcon={installedPacks.length > 0 ? (onChoose, opener) => setChoosing({ onChoose, opener }) : undefined}
+                            onAddPack={installedPacks.length === 0 && canAddPack ? openHelp : undefined}
+                        />
+                    </div>
+                    <div className="status-area">
+                        {error && <div className="error-box">{error}</div>}
+                        {uploadError && <div className="error-box" role="alert">{uploadError}</div>}
+                    </div>
+                </section>
+                <div className="preview-container">
+                    <div className="preview-toolbar">
+                        <div className="zoom-controls">
+                            <button 
+                                className="zoom-btn" 
+                                onClick={() => handleZoom('out')}
+                                title="Zoom Out (50%-25%)"
+                            >
+                                −
+                            </button>
+                            <span className="zoom-display">{zoom}%</span>
+                            <button 
+                                className="zoom-btn" 
+                                onClick={() => handleZoom('in')}
+                                title="Zoom In (100%-300%)"
+                            >
+                                +
+                            </button>
+                            <button 
+                                className="zoom-btn reset" 
+                                onClick={() => handleZoom('reset')}
+                                title="Reset Zoom to 100%"
+                            >
+                                ↺
+                            </button>
                         </div>
-                        <p className="export-message" role="status" aria-live="polite">{exportMessage(exportElapsed)}</p>
+                        <div className="preview-info">
+                            {error ? '❌ Error' : '✓ Ready'}
+                        </div>
                     </div>
-                )}
-                {exportState.phase === 'done' && (
-                    <div className="export-status export-done" role="status">✓ {exportState.filename} downloaded.</div>
-                )}
-                {exportState.phase === 'error' && (
-                    <div className="error-box export-error" role="alert">
-                        <span>{exportState.message}</span>
-                        {exportState.retryable && (
-                            <button className="retry-btn" onClick={handleDownload}>Try again</button>
-                        )}
-                        {exportState.requestId && (
-                            <span className="export-reference">Reference: {exportState.requestId}</span>
-                        )}
+                    <div className="preview-pane" ref={containerRef}>
+                        <div
+                            ref={previewRef}
+                            className={tab === 'build' ? 'mermaid-preview selectable' : 'mermaid-preview'}
+                            style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }}
+                            onClick={onPreviewClick}
+                        />
                     </div>
-                )}
-                {exportState.phase === 'idle' && engine !== 'unknown' && (
-                    <p className={`engine-hint ${engine}`}>
-                        {engine === 'ready' ? 'Render engine ready.' : 'Waking the render engine so your first export is quick…'}
-                    </p>
-                )}
-                {error && <div className="error-box">{error}</div>}
-                {uploadError && <div className="error-box">{uploadError}</div>}
-                <div className="tos-footer">
-                    <p><strong>API Documentation:</strong> <code>POST /api/generate</code> with <code>{'{code: "graph TD; A--&gt;B;", output: "png"}'}</code>. Response: image with embedded metadata. Rate limit: 20/min.</p>
-                    <p className="tos-privacy">🔒 Privacy: No data stored.{branding.contactEmail && <> Enterprise SLA available. <a href={`mailto:${branding.contactEmail}`} style={{color: '#4A90E2'}}>Contact sales</a>.</>}</p>
-                    {packNotices.map(({ prefix, text }) => (
-                        <p key={prefix} className="tos-privacy">{text}</p>
-                    ))}
-                    {branding.basedOn && (
-                        <p className="tos-privacy">{branding.productName} is based on <a href={branding.basedOn.url} target="_blank" rel="noopener noreferrer" style={{color: '#4A90E2'}}>{branding.basedOn.name}</a>, an open-source project under the Apache License 2.0.</p>
-                    )}
                 </div>
             </div>
+            <footer className="legal-footer">
+                <p>🔒 Privacy: No data stored.</p>
+                {packNotices.map(({ prefix, text }) => (
+                    <p key={prefix}>{text}</p>
+                ))}
+                {branding.basedOn && (
+                    <p>{branding.productName} is based on <a href={branding.basedOn.url} target="_blank" rel="noopener noreferrer">{branding.basedOn.name}</a>, an open-source project under the Apache License 2.0.</p>
+                )}
+            </footer>
             {(pickerOpen || choosing) && installedPacks.length > 0 && (
                 <IconPicker packs={installedPacks} code={code} onInsert={insertPackIcon} onChoose={choosing?.onChoose} onClose={closePicker}
                     onAddPack={canAddPack ? () => { pickerHandoff.current = true; openHelp(choosing?.opener ?? insertButtonRef.current); } : undefined} />
@@ -881,45 +883,14 @@ const DiagramEditor: React.FC = () => {
             {helpOpener !== undefined && canAddPack && recipeInfo && (
                 <PackHelp recipes={recipeInfo.recipes} version={recipeInfo.version} installed={installedPacks} onClose={closeHelp} />
             )}
-            <div className="preview-container">
-                <div className="preview-toolbar">
-                    <div className="zoom-controls">
-                        <button 
-                            className="zoom-btn" 
-                            onClick={() => handleZoom('out')}
-                            title="Zoom Out (50%-25%)"
-                        >
-                            −
-                        </button>
-                        <span className="zoom-display">{zoom}%</span>
-                        <button 
-                            className="zoom-btn" 
-                            onClick={() => handleZoom('in')}
-                            title="Zoom In (100%-300%)"
-                        >
-                            +
-                        </button>
-                        <button 
-                            className="zoom-btn reset" 
-                            onClick={() => handleZoom('reset')}
-                            title="Reset Zoom to 100%"
-                        >
-                            ↺
-                        </button>
-                    </div>
-                    <div className="preview-info">
-                        {error ? '❌ Error' : '✓ Ready'}
-                    </div>
-                </div>
-                <div className="preview-pane" ref={containerRef}>
-                    <div
-                        ref={previewRef}
-                        className={tab === 'build' ? 'mermaid-preview selectable' : 'mermaid-preview'}
-                        style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }}
-                        onClick={onPreviewClick}
-                    />
-                </div>
-            </div>
+            {aboutOpen && (
+                <AboutDialog
+                    packs={packs}
+                    canAddPack={canAddPack}
+                    onAddPack={() => { setAboutOpen(false); openHelp(aboutButtonRef.current); }}
+                    onClose={closeAbout}
+                />
+            )}
         </div>
     );
 };

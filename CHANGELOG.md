@@ -4,6 +4,11 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Fixed
+
+- The preview no longer re-wraps the labels Mermaid has already laid out. Long labels in architecture diagrams sat on top of their icons, and words were joined ("Cloud Load Balancing" read "Cloud / LoadBalancing"); in sequence, class and other diagrams the re-wrapped text overlapped lines and boxes. Labels now have the same lines as in the export.
+- Diagram text in the preview is measured and shown in the font the export uses, at the size Mermaid lays it out for (it was shown smaller). Members of a class in a class diagram no longer hang out of the left side of the box.
+
 ## [1.6.0] - 2026-11-22
 
 ### Changed

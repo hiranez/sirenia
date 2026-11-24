@@ -9,6 +9,7 @@ import { loadRecipes, type RecipeInfo } from '../utils/packHelp';
 import { insertIcon, type CatalogEntry } from '../utils/iconPicker';
 import { canRedo, canUndo, createHistory, record, redo, undo, type History } from '../utils/history';
 import { nodeAt, showSelection } from '../utils/architecturePreview';
+import { showAtNaturalSize } from '../utils/previewSize';
 import IconPicker from './IconPicker';
 import PackHelp from './PackHelp';
 import AboutDialog from './AboutDialog';
@@ -174,6 +175,9 @@ const DiagramEditor: React.FC = () => {
             },
             gantt: {
                 useMaxWidth: false,
+                // Without a width, a Gantt chart takes the width of whatever element it is rendered
+                // in. Same value as the render backend, so the chart is the one that is exported.
+                useWidth: 1200,
             },
             classDiagram: {
                 useMaxWidth: false,
@@ -270,53 +274,12 @@ const DiagramEditor: React.FC = () => {
                 // as in the export: re-wrapping them here moved them onto the icons and joined words.
                 previewRef.current.innerHTML = result.svg;
                 
-                // Verify and measure SVG
                 const svgInDOM = previewRef.current.querySelector('svg');
                 
                 if (svgInDOM) {
-                    // Wait for DOM reflow BEFORE measuring (critical!)
-                    await new Promise(resolve => {
-                        requestAnimationFrame(() => {
-                            // Force reflow
-                            void svgInDOM.getBBox();
-                            resolve(undefined);
-                        });
-                    });
-                    
-                    // Measure the rendered diagram
-                    const bbox = svgInDOM.getBBox();
-                    const rect = svgInDOM.getBoundingClientRect();
-                    
-                    // Update viewBox based on actual content dimensions
-                    const padding = 10;
-                    const newViewBox = `${bbox.x - padding} ${bbox.y - padding} ${bbox.width + padding * 2} ${bbox.height + padding * 2}`;
-                    svgInDOM.setAttribute('viewBox', newViewBox);
-                    
-                    // Set width/height for proper display
-                    const displayWidth = Math.max(bbox.width + padding * 2, 400);
-                    const displayHeight = Math.max(bbox.height + padding * 2, 300);
-                    svgInDOM.setAttribute('width', String(displayWidth));
-                    svgInDOM.setAttribute('height', String(displayHeight));
-                    
-                    // Ensure SVG has proper viewBox for responsive scaling
-                    if (!svgInDOM.getAttribute('viewBox')) {
-                        const viewBoxValue = `${bbox.x} ${bbox.y} ${bbox.width} ${bbox.height}`;
-                        svgInDOM.setAttribute('viewBox', viewBoxValue);
-                    }
-                    
-                    // Ensure width/height are set for initial display
-                    if (!svgInDOM.getAttribute('width')) {
-                        svgInDOM.setAttribute('width', String(Math.ceil(rect.width || 800)));
-                    }
-                    if (!svgInDOM.getAttribute('height')) {
-                        svgInDOM.setAttribute('height', String(Math.ceil(rect.height || 600)));
-                    }
-                    
-                    // Remove any inline styling that might constrain size
-                    svgInDOM.style.maxWidth = 'none';
-                    svgInDOM.style.maxHeight = 'none';
-                    svgInDOM.style.width = 'auto';
-                    svgInDOM.style.height = 'auto';
+                    // The drawing area Mermaid chose, at its natural size, as in the export. Measuring
+                    // what is drawn instead made a Gantt chart tens of thousands of pixels wide.
+                    showAtNaturalSize(svgInDOM);
                     setRenders((n) => n + 1);
                 } else {
                     console.warn('[WARNING] No SVG found in rendered content!');

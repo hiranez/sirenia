@@ -4,6 +4,15 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Fixed
+
+- A Gantt chart was tens of thousands of pixels wide in the preview when its dates were far from today (the built-in example was). The preview measured everything Mermaid draws, including the "today" line, which sits where today falls on the time axis. The preview now shows the drawing area Mermaid chose, as the export does.
+- An exported Gantt chart was only 300 px wide, with labels cut off. Gantt charts are now 1200 px wide in the export and in the preview. A diagram can set another width: `%%{init: {"gantt": {"useWidth": 800}}}%%`.
+
+### Changed
+
+- The preview shows every diagram at the size and with the margins of the export. Small diagrams are no longer enlarged or padded to at least 400 by 300 px.
+
 ## [1.6.1] - 2026-11-23
 
 ### Fixed

@@ -272,7 +272,9 @@ async function renderToBuffer(page, type, output, code) {
         theme: 'default',
         flowchart: { useMaxWidth: false, htmlLabels: false, curve: 'linear' },
         sequence: { useMaxWidth: false },
-        gantt: { useMaxWidth: false },
+        // Without a width, a Gantt chart takes the width of the element it is rendered in: here an
+        // empty one, which made the chart 300 px wide. The editor's preview uses the same value.
+        gantt: { useMaxWidth: false, useWidth: 1200 },
         classDiagram: { useMaxWidth: false, htmlLabels: false },
         state: { useMaxWidth: false },
         architecture: { useMaxWidth: false },

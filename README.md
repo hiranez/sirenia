@@ -24,7 +24,7 @@ The editor has two tabs above the code. **Code** is the text editor. **Build** p
 You need Docker.
 
 ```bash
-docker run --rm -p 8080:8080 -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.6.1
+docker run --rm -p 8080:8080 -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.6.2
 ```
 
 Open <http://localhost:8080>.
@@ -63,7 +63,7 @@ This adds the Google Cloud icons (the recipe `gcp`) to the container from the qu
 1. In a terminal, run:
 
    ```bash
-   docker run --rm -it -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.6.1 packs add gcp
+   docker run --rm -it -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.6.2 packs add gcp
    ```
 
    It shows the vendor's terms and asks you to type `yes`. Then it downloads the icons from the vendor and checks each download against a pinned SHA-256 checksum; a mismatch stops the install.
@@ -76,7 +76,7 @@ This adds the Google Cloud icons (the recipe `gcp`) to the container from the qu
 `packs list` shows the recipes and the packs you have installed:
 
 ```bash
-docker run --rm -it -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.6.1 packs list
+docker run --rm -it -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.6.2 packs list
 ```
 
 ### Built from source

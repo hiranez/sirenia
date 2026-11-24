@@ -144,93 +144,12 @@ const DiagramEditor: React.FC = () => {
     const pickerHandoff = useRef(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Helper: Break long text in SVG into multiple tspan lines
-    const wrapSVGText = (svg: SVGElement, maxCharsPerLine: number = 18) => {
-        const textElements = svg.querySelectorAll('text');
-        
-        textElements.forEach((textEl) => {
-            // Get all text content including from tspans
-            const originalText = textEl.textContent || '';
-            
-            // Only process if text is longer than threshold
-            if (originalText.length > maxCharsPerLine) {
-                // Store original text position attributes
-                const x = textEl.getAttribute('x') || '0';
-                const startX = textEl.getAttribute('startX') || x;
-                
-                // Clear all content
-                while (textEl.firstChild) {
-                    textEl.removeChild(textEl.firstChild);
-                }
-                
-                // Split into words
-                const words = originalText.split(/\s+/);
-                let currentLine = '';
-                let lineCount = 0;
-                
-                words.forEach((word) => {
-                    // Handle long words that exceed maxCharsPerLine by themselves
-                    if (word.length > maxCharsPerLine) {
-                        // First, save the current line if it exists
-                        if (currentLine.trim()) {
-                            const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-                            tspan.setAttribute('x', startX);
-                            if (lineCount > 0) tspan.setAttribute('dy', '1.2em');
-                            tspan.textContent = currentLine.trim();
-                            textEl.appendChild(tspan);
-                            lineCount++;
-                            currentLine = '';
-                        }
-                        
-                        // Break the long word into chunks
-                        for (let i = 0; i < word.length; i += maxCharsPerLine) {
-                            const chunk = word.substring(i, i + maxCharsPerLine);
-                            const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-                            tspan.setAttribute('x', startX);
-                            if (lineCount > 0) tspan.setAttribute('dy', '1.2em');
-                            tspan.textContent = chunk;
-                            textEl.appendChild(tspan);
-                            lineCount++;
-                        }
-                    } else {
-                        // Try to add word to current line
-                        const testLine = currentLine ? currentLine + ' ' + word : word;
-                        
-                        if (testLine.length <= maxCharsPerLine) {
-                            currentLine = testLine;
-                        } else {
-                            // Current line is full, save it and start new line
-                            if (currentLine) {
-                                const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-                                tspan.setAttribute('x', startX);
-                                if (lineCount > 0) tspan.setAttribute('dy', '1.2em');
-                                tspan.textContent = currentLine;
-                                textEl.appendChild(tspan);
-                                lineCount++;
-                            }
-                            currentLine = word;
-                        }
-                    }
-                });
-                
-                // Add remaining text
-                if (currentLine.trim()) {
-                    const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-                    tspan.setAttribute('x', startX);
-                    if (lineCount > 0) tspan.setAttribute('dy', '1.2em');
-                    tspan.textContent = currentLine.trim();
-                    textEl.appendChild(tspan);
-                }
-            }
-        });
-    };
-
     // Initialize Mermaid once
     useEffect(() => {
         const config: any = {
             startOnLoad: false,
             // 'strict' hardens rendering of untrusted diagrams (e.g. code extracted from an
-            // uploaded export via "Restore from Exported SVG or PNG"): no HTML in labels, no click bindings.
+            // uploaded export via "Restore from export..."): no HTML in labels, no click bindings.
             securityLevel: 'strict',
             // Root-level switch, as in the render backend: labels are SVG text, so the preview
             // matches the export. The per-diagram htmlLabels settings below do not turn HTML
@@ -347,16 +266,14 @@ const DiagramEditor: React.FC = () => {
                 // Try to render
                 const result = await mermaid.render(id, code);
                 
-                // Inject SVG
+                // Show Mermaid's SVG as it is. The labels keep the lines and positions Mermaid gave them,
+                // as in the export: re-wrapping them here moved them onto the icons and joined words.
                 previewRef.current.innerHTML = result.svg;
                 
                 // Verify and measure SVG
                 const svgInDOM = previewRef.current.querySelector('svg');
                 
                 if (svgInDOM) {
-                    // Apply text wrapping to long text elements
-                    wrapSVGText(svgInDOM, 14); // Max 14 chars per line - more aggressive wrapping
-                    
                     // Wait for DOM reflow BEFORE measuring (critical!)
                     await new Promise(resolve => {
                         requestAnimationFrame(() => {
@@ -366,7 +283,7 @@ const DiagramEditor: React.FC = () => {
                         });
                     });
                     
-                    // NOW measure the actual rendered dimensions after text wrapping
+                    // Measure the rendered diagram
                     const bbox = svgInDOM.getBBox();
                     const rect = svgInDOM.getBoundingClientRect();
                     

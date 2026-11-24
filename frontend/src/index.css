@@ -1277,35 +1277,17 @@ body {
   height: auto !important;
 }
 
-/* SVG text styling - wrapping handled by tspan elements from JavaScript */
-.mermaid-preview svg text {
-  overflow: visible !important;
-  font-size: 14px !important;
-  font-family: Arial, sans-serif !important;
-}
-
-.mermaid-preview svg tspan {
-  overflow: visible !important;
-  font-size: inherit !important;
+/* Diagram text: the same rule as in the page the render backend draws in, so labels break where
+   they break in the export. It covers the whole page because Mermaid measures a label outside the
+   preview, and a label must be measured in the font it is shown in. Nothing here may set the size,
+   anchor or baseline of diagram text: Mermaid has already placed it. */
+svg text,
+svg tspan {
+  font-family: Arial, sans-serif;
 }
 
 /* Allow all SVG elements to expand to fit content */
 .mermaid-preview svg * {
-  overflow: visible !important;
-}
-
-/* Specific rules for flowchart nodes to prevent text clipping */
-.mermaid-preview svg .flowchart-v2 .nodeLabel,
-.mermaid-preview svg .flowchart .nodeLabel,
-.mermaid-preview svg .node text {
-  text-anchor: middle;
-  overflow: visible !important;
-  dominant-baseline: middle;
-}
-
-/* Class diagram text wrapping */
-.mermaid-preview svg .classBox text,
-.mermaid-preview svg .classBox tspan {
   overflow: visible !important;
 }
 

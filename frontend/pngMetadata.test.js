@@ -1,4 +1,4 @@
-// Unit tests for the PNG metadata reader used by "Restore from Exported SVG or PNG". Run with: npm test
+// Unit tests for the PNG metadata reader used by "Restore from export...". Run with: npm test
 // The module is TypeScript; Node 22 runs it directly (type stripping), so no build step is needed.
 import test from 'node:test';
 import assert from 'node:assert/strict';

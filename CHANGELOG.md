@@ -4,6 +4,8 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-11-24
+
 ### Fixed
 
 - A Gantt chart was tens of thousands of pixels wide in the preview when its dates were far from today (the built-in example was). The preview measured everything Mermaid draws, including the "today" line, which sits where today falls on the time axis. The preview now shows the drawing area Mermaid chose, as the export does.

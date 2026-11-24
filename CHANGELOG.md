@@ -4,6 +4,8 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-11-23
+
 ### Fixed
 
 - The preview no longer re-wraps the labels Mermaid has already laid out. Long labels in architecture diagrams sat on top of their icons, and words were joined ("Cloud Load Balancing" read "Cloud / LoadBalancing"); in sequence, class and other diagrams the re-wrapped text overlapped lines and boxes. Labels now have the same lines as in the export.

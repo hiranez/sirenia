@@ -40,6 +40,8 @@ interface Props {
 
 const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? 'Cmd' : 'Ctrl';
 const UNDO_HINT = ` Undo: ${MOD}+Z`;
+// Marks an Undo or Redo as the builder's own change of the text.
+const HISTORY_STEP = '\u0000history';
 // The architecture tools, shown (disabled) before there is a diagram to build.
 const START_TOOLS = ['Add service', 'Add group', 'Add junction', 'Connect'];
 
@@ -136,6 +138,25 @@ const DiagramBuilder: React.FC<Props> = ({
         else svg?.querySelectorAll('.builder-overlay').forEach((el) => el.remove());
     }, [previewRef, renders, active, adapter, selection, connecting, target]);
 
+    // When the text changes from outside the builder (typing in the Code tab, an example, a restored
+    // export), what the status line says, connect mode and a pending second Delete no longer apply.
+    const [ownChange, setOwnChange] = useState<string | null>(null);
+    const [seenCode, setSeenCode] = useState(code);
+    if (code !== seenCode) {
+        setSeenCode(code);
+        setOwnChange(null);
+        if (ownChange !== code && ownChange !== HISTORY_STEP) {
+            setNotice('');
+            setConnectFrom(null);
+            setPendingDelete(null);
+        }
+    }
+    /** A builder edit: one undo step, and not a change from outside. */
+    const edit = (next: string) => {
+        setOwnChange(next);
+        onEdit(next);
+    };
+
     const svgOf = () => previewRef.current?.querySelector('svg') ?? null;
     const say = (message: string) => setNotice(message);
 
@@ -145,7 +166,7 @@ const DiagramBuilder: React.FC<Props> = ({
             say(result.error.message);
             return false;
         }
-        if (result.code !== code) onEdit(result.code);
+        if (result.code !== code) edit(result.code);
         say(`${message}${UNDO_HINT}`);
         return true;
     };
@@ -183,9 +204,10 @@ const DiagramBuilder: React.FC<Props> = ({
         const activeEl = document.activeElement;
         const field = activeEl instanceof HTMLElement && activeEl.closest('.builder-form') ? activeEl.dataset.field : undefined;
         refocus(next ? field : undefined, next ? '.builder-form [data-field="submit"]' : '.builder-outline [tabindex="0"]');
-        if (result.code !== code) onEdit(result.code);
+        if (result.code !== code) edit(result.code);
         setAdding(null);
-        setNotice(result.code !== code ? `${message}${UNDO_HINT}` : message);
+        const full = `${message}${adapter?.afterEdit?.(result.also) ?? ''}`;
+        setNotice(result.code !== code ? `${full}${UNDO_HINT}` : full);
         onSelect(toSelection(next, result.code));
         return null;
     };
@@ -245,12 +267,14 @@ const DiagramBuilder: React.FC<Props> = ({
     const undo = () => {
         if (!canUndo) return say('There is nothing to undo.');
         setConnectFrom(null);
+        setOwnChange(HISTORY_STEP);
         onUndo();
         say(`Undid the last change. Redo: ${MOD}+Shift+Z`);
     };
     const redo = () => {
         if (!canRedo) return say('There is nothing to redo.');
         setConnectFrom(null);
+        setOwnChange(HISTORY_STEP);
         onRedo();
         say(`Redid the change. Undo: ${MOD}+Z`);
     };
@@ -264,7 +288,7 @@ const DiagramBuilder: React.FC<Props> = ({
     const chooseTemplate = (template: Template) => {
         const blank = kind === 'empty' ? code : '';
         const next = template.id === EMPTY_TEMPLATE_ID ? startArchitecture(blank) : template.id === EMPTY_FLOWCHART_ID ? startFlowchart(blank) : template.code;
-        onEdit(next);
+        edit(next);
         setAdding(null);
         setConnectFrom(null);
         onSelect(null);
@@ -424,7 +448,7 @@ const DiagramBuilder: React.FC<Props> = ({
     const ownStarters = adapter?.kind === 'flowchart' ? FLOWCHART_TEMPLATES.filter((t) => t.id !== EMPTY_FLOWCHART_ID) : templates.filter((t) => t.id !== EMPTY_TEMPLATE_ID);
     const confirmReplace = adapter ? !adapter.keepsNothing : !replacesNothing(code);
     const texts = adapter?.texts;
-    const toolSelect = adapter?.toolSelect;
+    const toolChoice = adapter?.toolChoice;
 
     return (
         <div className="builder" ref={rootRef}>
@@ -452,13 +476,23 @@ const DiagramBuilder: React.FC<Props> = ({
                 {adapter
                     ? adapter.tools.map((t) => <button key={t.what} type="button" className="example-btn" onClick={() => startAdding(t.what)}>{t.label}</button>)
                     : START_TOOLS.map((label) => <button key={label} type="button" className="example-btn" disabled>{label}</button>)}
-                {toolSelect && (
-                    <label className="builder-toolbar-select">
-                        <span>{toolSelect.label}</span>
-                        <select value={toolSelect.value} onChange={(e) => applyOutcome(toolSelect.set(e.target.value))}>
-                            {toolSelect.options.map((o) => <option key={o.value} value={o.value} disabled={o.value === ''}>{o.label}</option>)}
-                        </select>
-                    </label>
+                {toolChoice && (
+                    <span className="builder-segmented" role="group" aria-labelledby={`${id}-choice`}>
+                        <span id={`${id}-choice`} className="sr-only">{toolChoice.label}</span>
+                        {toolChoice.options.map((o) => (
+                            <button
+                                key={o.value}
+                                type="button"
+                                className="builder-segment"
+                                aria-pressed={o.value === toolChoice.value}
+                                aria-label={o.label}
+                                title={`${toolChoice.label}: ${o.label.toLowerCase()}`}
+                                onClick={() => { if (o.value !== toolChoice.value) applyOutcome(toolChoice.set(o.value)); }}
+                            >
+                                <span aria-hidden="true">{o.symbol}</span>
+                            </button>
+                        ))}
+                    </span>
                 )}
             </div>
             <p className="builder-notice" role="status" aria-live="polite">{notice}</p>

@@ -305,17 +305,55 @@ function view(m) {
   };
 }
 
-/** The statements and lines the builder does not manage, trimmed, in order. */
+/** The statements and lines the builder does not manage and never changes, trimmed, in order. */
 function kept(m) {
   const out = [];
   m.lineRoles.forEach((role, i) => {
     if (['comment', 'directive', 'preamble', 'unmanaged'].includes(role)) out.push(m.lines[i].replace(/\r$/, '').trim());
   });
   for (const st of m.statements) {
-    if (st.kind === 'other' && m.lineRoles[st.line] !== 'unmanaged') out.push(F.stmtText(m, st));
+    if (st.kind === 'other' && !st.attach && m.lineRoles[st.line] !== 'unmanaged') out.push(F.stmtText(m, st));
   }
   return out;
 }
+
+/**
+ * The attached lines by what they name: style, class and click by id; linkStyle by the connections
+ * (from>to) its numbers point at. Each with the rest of its statement.
+ */
+function attachedView(m) {
+  return m.statements.filter((st) => st.kind === 'other' && st.attach).map((st) => {
+    const text = F.stmtText(m, st);
+    const rest = text.slice(st.attach.listEnd - st.start);
+    const items = st.attach.keyword === 'linkStyle'
+      ? st.attach.items.map((x) => { const e = m.edges[Number(x.value)]; return e ? `${e.from}>${e.to}` : `#${x.value}`; }).sort()
+      : st.attach.items.map((x) => x.value);
+    return JSON.stringify([st.attach.keyword, rest, items]);
+  }).sort();
+}
+
+/** attachedView after deleting ids and connections (from>to strings): they leave the lists; empty lists go. */
+function attachedWithout(view, ids, edges) {
+  return view.map((json) => {
+    const [keyword, rest, items] = JSON.parse(json);
+    let left;
+    if (keyword === 'linkStyle') {
+      left = [...items];
+      for (const e of edges) { const k = left.indexOf(e); if (k !== -1) left.splice(k, 1); }
+    } else left = items.filter((x) => !ids.includes(x));
+    return left.length ? JSON.stringify([keyword, rest, left]) : null;
+  }).filter(Boolean).sort();
+}
+
+/** The direction lines of subgraphs that are gone: they leave with their subgraph. */
+const droppedDirections = (before, after) => before.statements
+  .filter((st) => st.kind === 'other' && st.role === 'direction' && st.parent !== null && !after.subgraphs.some((g) => g.key === before.subgraphs.find((x) => x.statement === st.parent)?.key))
+  .map((st) => F.stmtText(before, st));
+const without = (list, gone) => {
+  const out = [...list];
+  for (const g of gone) { const k = out.indexOf(g); if (k !== -1) out.splice(k, 1); }
+  return out;
+};
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const sigOf = (e) => JSON.stringify([e.from, e.to, e.stroke, e.startHead, e.endHead, e.label]);
@@ -332,7 +370,7 @@ const removeOne = (list, item) => {
 function editsFor(code) {
   const m = F.parseFlowchart(code);
   const edits = [];
-  const add = (name, run, expect) => edits.push({ name, run, expect });
+  const add = (name, run, expect, removes) => edits.push({ name, run, expect, removes });
   const managed = m.subgraphs.filter((g) => g.managed);
   add('add node', () => F.addNode(code, { label: 'Added step' }), (v, after, r) => {
     v.nodes[r.id] = { label: 'Added step', shape: 'rect', icon: null, parent: '' };
@@ -367,7 +405,7 @@ function editsFor(code) {
       delete v.nodes[n.id];
       for (const e of m.edges) if (e.from === n.id || e.to === n.id) removeOne(v.edges, sigOf(e));
       return v;
-    });
+    }, (m) => ({ ids: [n.id], edges: m.edges.filter((e) => e.from === n.id || e.to === n.id).map((e) => `${e.from}>${e.to}`) }));
     for (const target of [null, ...managed.map((g) => g.key)]) {
       add(`move ${n.id} to ${target}`, () => F.setNodeParent(code, n.id, target), (v) => {
         v.nodes[n.id].parent = target === null ? '' : view(m).subgraphs.find((p) => p.split('/').at(-1) === F.findSubgraph(m, target).title) ?? '?';
@@ -405,11 +443,11 @@ function editsFor(code) {
     add(`edge delete ${e.key}`, () => F.removeEdge(code, e.key), (v) => {
       removeOne(v.edges, sigOf(e));
       return v;
-    });
+    }, () => ({ ids: [], edges: [`${e.from}>${e.to}`] }));
   }
   for (const g of managed) {
     add(`rename ${g.key}`, () => F.updateSubgraph(code, g.key, { title: 'Renamed stage' }), null);
-    add(`delete subgraph ${g.key}`, () => F.removeSubgraph(code, g.key), null);
+    edits.push({ name: `delete subgraph ${g.key}`, run: () => F.removeSubgraph(code, g.key), expect: null, removes: (m) => ({ ids: [g.key], edges: m.edges.filter((e) => e.from === g.key || e.to === g.key).map((e) => `${e.from}>${e.to}`) }) });
     add(`subgraph to top ${g.key}`, () => F.updateSubgraph(code, g.key, { parent: null }), null);
     add(`node into ${g.key}`, () => F.addNode(code, { label: 'Inside it', parent: g.key }), (v, after, r) => {
       v.nodes[r.id] = { label: 'Inside it', shape: 'rect', icon: null, parent: view(after).nodes[r.id]?.parent };
@@ -515,14 +553,14 @@ test('parse: a link label that goes on to the next line is left alone up to its 
 
 test('parse: what is not managed is counted and kept', () => {
   const counts = {
-    styling: 2, classes: 3, interaction: 4, linkStyle: 1, edgeIds: 2, markdown: 4, accessibility: 4, unknownLines: 3,
-    subgraphDirection: 3, specialChars: 0, comments: 0, initDirective: 0, frontMatter: 0, markdownEdge: 1,
+    styling: 2, classes: 3, interaction: 4, linkStyle: 1, edgeIds: 2, markdown: 3, accessibility: 4, unknownLines: 3,
+    subgraphDirection: 3, specialChars: 0, comments: 0, initDirective: 0, frontMatter: 0, markdownEdge: 0,
   };
   for (const [name, n] of Object.entries(counts)) assert.equal(F.parseFlowchart(CORPUS[name]).unmanaged.length, n, name);
   // Lines the reader is not sure about are other, never guessed.
   const other = [
     'A[]', 'A[x] [y]', 'A [x]', 'A["x" ]', 'A-->', '-->B', 'A-->B C', 'A&B', 'A.b --> c', 'A --> end', 'end --> A', 'A --> B@x',
-    'A[a@b] --> B', 'style-x --> B', 'A -- x', 'A -->|x B', 'A[x]]', 'A(-x-)', 'A[|x|]', 'v --> A', 'A -->|| B', 'A["`md`"]',
+    'A[a@b] --> B', 'style-x --> B', 'A -- x', 'A -->|x B', 'A[x]]', 'A(-x-)', 'A[|x|]', 'v --> A', 'A -->|| B', 'A["`md"]', 'A["`a`b`"]',
     'click A cb', 'A --> B %% c', 'A["x"]extra', 'é --> A', 'A--> B direction LR',
   ];
   for (const line of other) {
@@ -567,7 +605,11 @@ test('every edit: the result reads back, keeps every unmanaged statement, and ha
       applied++;
       const after = F.parseFlowchart(r.code);
       assert.ok(after, `${name}: ${edit.name}: still a flowchart`);
-      assert.deepEqual(kept(after), kept(before), `${name}: ${edit.name}: unmanaged statements unchanged`);
+      // As a multiset: moving a subgraph moves its lines.
+      assert.deepEqual(kept(after).sort(), without(kept(before), droppedDirections(before, after)).sort(), `${name}: ${edit.name}: unmanaged statements unchanged`);
+      // Attached lines change only with what they name.
+      const gone = edit.removes ? edit.removes(before) : { ids: [], edges: [] };
+      assert.deepEqual(attachedView(after), attachedWithout(attachedView(before), gone.ids, gone.edges), `${name}: ${edit.name}: attached lines follow\n${r.code}`);
       if (r.code === code) continue;
       if (edit.expect) assert.deepEqual(view(after), edit.expect(clone(view(before)), after, r), `${name}: ${edit.name}: exactly the intended change\n${r.code}`);
       // Lines the edit does not concern are kept: every old line is still there, unless the edit removes
@@ -602,7 +644,7 @@ test('chains: deleting a node in the middle splits the chain; definitions elsewh
   assert.equal(ok(F.removeNode(CORPUS.fanout, 'b')).code, 'flowchart TD\n  start --> a & c\n  a & c --> finish\n  finish --> done');
 });
 
-test('edges: delete splits a chain; labels keep their form; & groups are read-only', () => {
+test('edges: delete splits a chain; labels keep their form; & statements are expanded to change one connection', () => {
   const code = 'flowchart LR\n  A --> B --> C --> D\n';
   const m = F.parseFlowchart(code);
   assert.equal(ok(F.removeEdge(code, m.edges[1].key)).code, 'flowchart LR\n  A --> B\n  C --> D\n');
@@ -615,9 +657,15 @@ test('edges: delete splits a chain; labels keep their form; & groups are read-on
   const l = F.parseFlowchart(CORPUS.loginIcons);
   const no = l.edges.find((e) => e.label === 'No');
   assert.equal(ok(F.updateEdge(CORPUS.loginIcons, no.key, { label: 'Not yet' })).code.split('\n')[3], '  auth -->|"Not yet"| login[Sign in page]');
+  // A connection written with & is changed by writing that statement as one per connection first.
   const f = F.parseFlowchart(CORPUS.fanout);
-  refused(F.removeEdge(CORPUS.fanout, f.edges[0].key), 'unmanaged');
-  refused(F.updateEdge(CORPUS.fanout, f.edges[0].key, { label: 'x' }), 'unmanaged');
+  assert.equal(ok(F.removeEdge(CORPUS.fanout, f.edges[1].key)).code, 'flowchart TD\n  start --> a\n  start --> c\n  a & b & c --> finish\n  finish --> done');
+  assert.equal(ok(F.updateEdge(CORPUS.fanout, f.edges[0].key, { label: 'go' })).code, 'flowchart TD\n  start -->|"go"| a\n  start --> b\n  start --> c\n  a & b & c --> finish\n  finish --> done');
+  const shaped = 'flowchart LR\n  A[One]:::x & B --> C{Two} --> D\n  linkStyle 2 stroke:#f00\n';
+  const s = F.parseFlowchart(shaped);
+  const expanded = ok(F.removeEdge(shaped, s.edges[1].key));
+  assert.equal(expanded.code, 'flowchart LR\n  A[One]:::x --> C{Two}\n  B\n  C --> D\n  linkStyle 1 stroke:#f00\n');
+  assert.equal(ok(F.updateEdge(shaped, s.edges[0].key, { label: '' })).code, shaped);
   // Never a duplicate of the same pair, direction, line and label.
   refused(F.addEdge(CORPUS.editorDefault, { from: 'A', to: 'B' }), 'duplicate');
   ok(F.addEdge(CORPUS.editorDefault, { from: 'A', to: 'B', label: 'again' }));
@@ -645,20 +693,132 @@ test('edges: a pipe label is followed by one space at most (Mermaid refuses more
   assert.equal(F.parseFlowchart(lines('flowchart TD', '  A -->|x|\tB')).edges.length, 1);
 });
 
-test('linkStyle numbers: edits that would renumber the styled edges are refused', () => {
-  const m = F.parseFlowchart(CORPUS.linkStyle);
-  assert.equal(m.linkStyleMax, 1);
-  refused(F.removeEdge(CORPUS.linkStyle, m.edges[0].key), 'in-use');
-  ok(F.removeEdge(CORPUS.linkStyle, m.edges[2].key));
-  ok(F.addEdge(CORPUS.linkStyle, { from: 'D', to: 'A' }));
-  ok(F.updateEdge(CORPUS.linkStyle, m.edges[1].key, { label: 'styled' }));
-  refused(F.removeNode(CORPUS.linkStyle, 'A'), 'in-use');
+const STYLED = lines(
+  'flowchart LR',
+  '  A[Start] --> B{Check}:::warn --> C[Done]',
+  '  C --> D[Archive]',
+  '  B --> D',
+  '  style A fill:#f9f',
+  '  style B stroke:#333',
+  '  class B,D warn',
+  '  classDef warn fill:#fdd',
+  '  click B call cb()',
+  '  linkStyle 1 stroke:#f00',
+  '  linkStyle 2,3 stroke:#00f',
+  '  linkStyle default stroke:#999',
+);
+
+test('markdown strings: read as labels, listed and connected, never rewritten', () => {
+  const code = 'flowchart LR\n  A["`**Bold** text`"] -->|"`*it*`"| B\n  B -- "`md`" --> C\n  subgraph s ["`Title **x**`"]\n    C\n  end\n';
+  const m = F.parseFlowchart(code);
+  assert.deepEqual(m.unmanaged, []);
+  assert.deepEqual([m.nodes[0].label, m.nodes[0].markdown, m.edges.map((e) => [e.label, e.markdown]), m.subgraphs[0].title], ['**Bold** text', true, [['*it*', true], ['md', true]], 'Title **x**']);
+  assert.match(refused(F.updateNode(code, 'A', { label: 'x' }), 'unmanaged'), /markdown string/);
+  refused(F.updateEdge(code, m.edges[0].key, { label: 'x' }), 'unmanaged');
+  refused(F.updateEdge(code, m.edges[1].key, { line: 'thick' }), 'unmanaged');
+  refused(F.updateSubgraph(code, 's', { title: 'x' }), 'unmanaged');
+  // Shape, line (pipe form), moves, connections and deletes work; the markdown text stays as written.
+  assert.equal(ok(F.updateNode(code, 'A', { shape: 'stadium' })).code.split('\n')[1], '  A(["`**Bold** text`"]) -->|"`*it*`"| B');
+  assert.equal(ok(F.updateEdge(code, m.edges[0].key, { line: 'thick' })).code.split('\n')[1], '  A["`**Bold** text`"] ==>|"`*it*`"| B');
+  ok(F.setNodeParent(code, 'A', 's'));
+  ok(F.connectNodes(code, 'C', 'A'));
+  assert.equal(ok(F.removeNode(code, 'B')).code, 'flowchart LR\n  A["`**Bold** text`"]\n  subgraph s ["`Title **x**`"]\n    C\n  end\n');
 });
 
-test('unmanaged statements that name a node block its deletion; classes are kept through edits', () => {
-  assert.match(refused(F.removeNode(CORPUS.styling, 'id1'), 'in-use'), /Line 3 \(style\) names Start/);
-  assert.match(refused(F.removeNode(CORPUS.interaction, 'B'), 'in-use'), /Line 6 \(click\)/);
-  refused(F.removeNode(CORPUS.classes, 'B'), 'in-use');
+test('attached lines: read with what they name', () => {
+  const m = F.parseFlowchart(STYLED);
+  const att = m.statements.filter((st) => st.attach).map((st) => `${st.attach.keyword}:${st.attach.items.map((x) => x.value)}`);
+  assert.deepEqual(att, ['style:A', 'style:B', 'class:B,D', 'click:B', 'linkStyle:1', 'linkStyle:2,3']);
+  // classDef, linkStyle default, and forms the builder does not read have no list (style takes one id).
+  for (const line of ['classDef warn fill:#fdd', 'linkStyle default stroke:#999', 'linkStyle 0, 1 stroke:#f00', 'style A', 'class A', 'style A,B fill:#f00']) {
+    assert.equal(F.parseFlowchart(`flowchart LR\n  A --> B\n  ${line}`).statements.at(-1).attach, undefined, line);
+  }
+});
+
+test('attached lines: deleting a node takes it out of style, class and click lists; linkStyle numbers follow', () => {
+  const r = ok(F.removeNode(STYLED, 'B'));
+  assert.equal(r.code, lines(
+    'flowchart LR',
+    '  A[Start]',
+    '  C[Done]',
+    '  C --> D[Archive]',
+    '  style A fill:#f9f',
+    '  class D warn',
+    '  classDef warn fill:#fdd',
+    '  linkStyle 0 stroke:#00f',
+    '  linkStyle default stroke:#999',
+  ));
+  assert.deepEqual(r.also, { deleted: { style: 1, click: 1, linkStyle: 1 }, updated: { class: 1, linkStyle: 1 }, lines: [] });
+  // A line that names only the node goes.
+  const a = ok(F.removeNode(STYLED, 'A'));
+  assert.ok(!a.code.includes('style A'));
+  assert.deepEqual(a.also.deleted, { style: 1 });
+  // linkStyle 1 styled B --> C; it is now connection 0.
+  assert.ok(a.code.includes('  linkStyle 0 stroke:#f00') && a.code.includes('  linkStyle 1,2 stroke:#00f'), a.code);
+});
+
+test('attached lines: linkStyle numbers follow every edit that changes the order of connections', () => {
+  const m = F.parseFlowchart(STYLED);
+  const styledEdge = (code, n) => { const x = F.parseFlowchart(code); return `${x.edges[n].from}>${x.edges[n].to}`; };
+  // Delete a connection: later numbers move down; its own number goes.
+  const del = ok(F.removeEdge(STYLED, m.edges[1].key));
+  assert.ok(!del.code.includes('linkStyle 1 stroke:#f00') && del.code.includes('  linkStyle 1,2 stroke:#00f'), del.code);
+  assert.equal(styledEdge(del.code, 1), 'C>D');
+  // Split a chain: A --> B --> C without A --> B.
+  const split = ok(F.removeEdge(STYLED, m.edges[0].key));
+  assert.ok(split.code.includes('  linkStyle 0 stroke:#f00') && split.code.includes('  linkStyle 1,2 stroke:#00f'), split.code);
+  assert.equal(styledEdge(split.code, 0), 'B>C');
+  // Other ends: the connection is written at the end; its style follows it there.
+  const ends = ok(F.updateEdge(STYLED, m.edges[1].key, { to: 'D', label: 'x' }));
+  const e = F.parseFlowchart(ends.code);
+  assert.equal(e.edges.at(-1).from + e.edges.at(-1).to, 'BD');
+  assert.ok(ends.code.includes(`  linkStyle ${e.edges.length - 1} stroke:#f00`), ends.code);
+  // Moving a node between subgraphs moves connection lines: matched by what they are.
+  const sub = 'flowchart LR\n  subgraph s [S]\n    a --> b\n  end\n  b --> c\n  linkStyle 0 stroke:#f00\n  linkStyle 1 stroke:#00f\n';
+  const moved = ok(F.setNodeParent(sub, 'a', null));
+  const mm = F.parseFlowchart(moved.code);
+  const red = Number(/linkStyle (\d+) stroke:#f00/.exec(moved.code)[1]);
+  assert.equal(`${mm.edges[red].from}>${mm.edges[red].to}`, 'a>b', moved.code);
+  // Adding a connection at the end changes no number.
+  assert.ok(ok(F.addEdge(STYLED, { from: 'D', to: 'A' })).code.includes('  linkStyle 1 stroke:#f00'));
+});
+
+test('attached lines: refused when the numbers cannot be known', () => {
+  const unread = 'flowchart LR\n  A --> B\n  B --> C\n  linkStyle 0, 1 stroke:#f00\n';
+  assert.match(refused(F.removeEdge(unread, F.parseFlowchart(unread).edges[0].key), 'in-use'), /Line 4 \(linkStyle\) is written in a form/);
+  const hidden = 'flowchart LR\n  A --> B\n  B -- a; b --> C\n  C --> D\n  linkStyle 1 stroke:#f00\n';
+  assert.match(refused(F.removeEdge(hidden, F.parseFlowchart(hidden).edges[0].key), 'in-use'), /Line 3 may hold connections/);
+  const twins = 'flowchart LR\n  subgraph s [S]\n    a --> b\n  end\n  a --> b\n  linkStyle 1 stroke:#f00\n';
+  assert.match(refused(F.setNodeParent(twins, 'b', null), 'in-use'), /look the same/);
+  // With nothing to renumber, the same edits go through.
+  ok(F.removeEdge(hidden.replace('  linkStyle 1 stroke:#f00\n', ''), F.parseFlowchart(hidden).edges[0].key));
+});
+
+test('attached lines: a subgraph takes its direction line and its style lines with it', () => {
+  const code = 'flowchart LR\n  subgraph top [Top]\n    direction TB\n    a --> b\n  end\n  b --> c\n  style top fill:#eee\n  class top,c hot\n';
+  const r = ok(F.removeSubgraph(code, 'top'));
+  assert.equal(r.code, 'flowchart LR\n  a --> b\n  b --> c\n  class c hot\n');
+  assert.deepEqual(r.also, { deleted: { style: 1, direction: 1 }, updated: { class: 1 }, lines: [] });
+});
+
+test('lines the builder does not read: a second Delete deletes them with the node', () => {
+  const code = 'flowchart LR\n  A[Start] --> B\n  B --> C\n  A -- note; here --> C\n  click A href "https://example.com"\n';
+  const first = refused(F.removeNode(code, 'A'), 'confirm');
+  assert.equal(first, 'Line 4 also names Start in a form the builder does not read. Press Delete again to delete Start and line 4 as well.');
+  const r = ok(F.removeNode(code, 'A', true));
+  assert.equal(r.code, 'flowchart LR\n  B --> C\n');
+  assert.deepEqual(r.also, { deleted: { click: 1 }, updated: {}, lines: [3] });
+  // A class named like the node is not a reference: classDef lines are never touched.
+  const named = 'flowchart LR\n  Start --> B\n  classDef Start fill:#f00\n  linkStyle 0 stroke:#00f\n  B --> C\n';
+  assert.equal(ok(F.removeNode(named, 'Start')).code, 'flowchart LR\n  classDef Start fill:#f00\n  B --> C\n');
+  // Text over several lines goes as a whole; descriptions are not references.
+  const block = 'flowchart LR\n  A --> B\n  accDescr: A is the start\n  A -- first\n  second --> B\n  B --> C\n';
+  const two = refused(F.removeNode(block, 'A'), 'confirm');
+  assert.match(two, /^Line 4 also names A/);
+  assert.equal(ok(F.removeNode(block, 'A', true)).code, 'flowchart LR\n  accDescr: A is the start\n  B --> C\n');
+});
+
+test('classes are kept through edits', () => {
   assert.equal(ok(F.updateNode(CORPUS.classes, 'A', { label: 'Some', shape: 'stadium' })).code.split('\n')[1], '    A(["Some"]):::someclass --> B');
   assert.equal(ok(F.updateNode(CORPUS.classesInline, 'B', { label: 'Bee' })).code.split('\n')[1], '  A:::red & B["Bee"]:::blue --> C');
   // A node only named by lines the builder does not read is not in the model.
@@ -715,21 +875,60 @@ test('subgraphs: add, rename, move, delete', () => {
   assert.equal(out.code, 'flowchart TB\n  subgraph one [Stage one]\n    a1 --> a2\n  end\n  subgraph two\n  end\n  a2 --> b1\n');
 });
 
-test('labels: what cannot be shown as typed is refused, the rest is written as typed', () => {
-  const refusedLabels = ['a "b" c', 'click A href "javascript:alert(1)"', '<b>bold</b>', '--> B', 'a > b', 'line<br>break', 'Step #35;', 'x &amp; y', '`tick`', 'go direction LR', 'two\nlines'];
-  for (const label of refusedLabels) assert.ok(F.labelProblem(label), label);
-  const accepted = ['x]', '(y)', '{z}', 'a|b', '%% no', 'end', 'subgraph x', 'a & b', 'Step #1', '50% off', 'tail`', 'a;b', 'x:::y', 'café', '日本語', 'emoji 🚀', 'a'.repeat(120)];
-  for (const label of accepted) {
-    assert.equal(F.labelProblem(label), null, label);
-    const r = ok(F.addNode(CORPUS.editorDefault, { label }));
-    assert.equal(F.findNode(F.parseFlowchart(r.code), r.id).label, label, `${label} reads back`);
-    const e = ok(F.addEdge(CORPUS.editorDefault, { from: 'D', to: 'A', label }));
-    assert.equal(F.findEdge(F.parseFlowchart(e.code), e.key).label, label, `${label} reads back on an edge`);
+// Labels the owner asked for, and the awkward ones: every one is accepted, written with Mermaid's
+// codes where needed, and reads back as typed.
+export const AWKWARD = [
+  'say "hi"', 'A -> B', '1 < 2', 'a > b', '<b>bold</b>', '<img src=x onerror=alert(1)>', '"]; click A call alert(1)', 'R&D;', '#tag;',
+  '`code`', 'direction LR', "it's & more", '50% off', 'a "b" c', 'x]', '(y)', '{z}', 'a|b', '--> B', '%% no', 'end', 'subgraph x',
+  'click A href "javascript:alert(1)"', '&amp; &lt;', '#quot; #35;', 'style:x#y z;', 'classDef a:b#c;', 'go direction TB now',
+  'This label is a long sentence of about one hundred and twenty characters, to see that wrapping keeps every word.', 'Ünïcödé 日本語 текст', 'Ship it 🚀',
+];
+
+test('labels: only empty labels and line breaks are refused', () => {
+  assert.equal(F.labelProblem(''), 'Enter a label.');
+  assert.equal(F.labelProblem('  ', true), null);
+  assert.equal(F.labelProblem('two\nlines'), 'A label has to fit on one line.');
+  for (const label of AWKWARD) assert.equal(F.labelProblem(label), null, label);
+});
+
+test('labels: the encoding table', () => {
+  const table = [
+    ['say "hi"', 'say #quot;hi#quot;'], ['A -> B', 'A -#gt; B'], ['1 < 2', '1 #lt; 2'], ['<b>', '#lt;b#gt;'], ['R&D;', 'R#38;D;'], ['&quot;', '#38;quot;'],
+    ['a & b', 'a & b'], ['&#12;', '#38;#35;12;'], ['#tag;', '#35;tag;'], ['#1 ok', '#1 ok'], ['50% off', '50% off'], ['`code`', '#96;code`'],
+    ['a `b`', 'a `b`'], ['direction LR', 'direction#32;LR'], ['redirection TD x', 'redirection#32;TD x'], ['direction up', 'direction up'],
+    ['style:x#y z;', 'style#58;x#y z;'], ['style:x#y;', 'style#58;x#35;y;'], ['a: b', 'a: b'], ["it's", "it's"], ['%% no', '%% no'], ['x]', 'x]'],
+  ];
+  for (const [typed, written] of table) assert.equal(F.encodeLabel(typed), written, typed);
+  for (const [typed, written] of table) assert.equal(F.decodeLabel(written), typed, written);
+  // Codes Mermaid draws as their character are read as it; other named codes stay as written.
+  assert.equal(F.decodeLabel('#lt;#gt;#amp;#quot;#9829;#128512;#nbsp;#0;'), '<>&"♥😀#nbsp;#0;');
+});
+
+test('labels: every awkward label is written, reads back as typed, and a second edit does not encode twice', () => {
+  const base = CORPUS.editorDefault;
+  for (const label of AWKWARD) {
+    const node = ok(F.addNode(base, { label }));
+    assert.equal(F.findNode(F.parseFlowchart(node.code), node.id).label, label, `node: ${label}`);
+    // Unchanged: nothing is rewritten. Changed and changed back: the same text as the first time.
+    assert.equal(ok(F.updateNode(node.code, node.id, { label })).code, node.code, `no-op: ${label}`);
+    const twice = ok(F.updateNode(ok(F.updateNode(node.code, node.id, { label: 'other' })).code, node.id, { label }));
+    assert.equal(twice.code, node.code, `again: ${label}`);
+    const icon = ok(F.addNode(base, { label, icon: 'demo:run-service' }));
+    assert.equal(F.findNode(F.parseFlowchart(icon.code), icon.id).label, label, `icon node: ${label}`);
+    const edge = ok(F.addEdge(base, { from: 'D', to: 'A', label }));
+    const em = F.parseFlowchart(edge.code);
+    assert.equal(F.findEdge(em, edge.key).label, label, `edge: ${label}`);
+    assert.equal(ok(F.updateEdge(edge.code, edge.key, { label })).code, edge.code, `edge no-op: ${label}`);
+    const sub = ok(F.addSubgraph(base, { title: label }));
+    assert.equal(F.findSubgraph(F.parseFlowchart(sub.code), sub.id).title, label, `subgraph: ${label}`);
+    // What is written never adds a node, an edge or a line, and never reads as a click or a style.
+    const m = F.parseFlowchart(node.code);
+    assert.equal(m.nodes.length, 5, label);
+    assert.deepEqual(m.unmanaged, [], label);
   }
-  refused(F.addNode(CORPUS.editorDefault, { label: 'a "b"' }), 'label');
-  refused(F.addNode(CORPUS.editorDefault, { label: '' }), 'label');
-  // Mermaid's entity preprocessing would eat the last ; of "style…:…#…;" on a line.
-  refused(F.addNode(CORPUS.editorDefault, { label: 'style:x#y z;' }), 'label');
+  // Text written by hand with codes reads as the characters Mermaid draws.
+  const hand = F.parseFlowchart('flowchart LR\n  A["say #quot;hi#quot; #lt;b#gt;"] -->|"#35;1 #amp; 2"| B');
+  assert.deepEqual([hand.nodes[0].label, hand.edges[0].label], ['say "hi" <b>', '#1 & 2']);
 });
 
 test('direction: written into the header, with or without a semicolon', () => {
@@ -797,15 +996,16 @@ export function randomEdit(M, code, rand, n) {
 }
 // random:end
 
-test('random edit sequences: 600 sequences over the corpus always read back and keep the unmanaged lines', () => {
+test('random edit sequences: 600 sequences over the corpus (styled ones included) read back, keep unmanaged lines and move attached ones', () => {
   const rand = rng(20261126);
   let steps = 0;
   let inverses = 0;
+  let attached = 0;
   const names = Object.keys(CORPUS);
   for (let s = 0; s < 600; s++) {
     const name = names[s % names.length];
     let code = CORPUS[name];
-    const keep = kept(F.parseFlowchart(code));
+    let keep = kept(F.parseFlowchart(code));
     for (let n = 0; n < 8; n++) {
       const [op, r] = randomEdit(F, code, rand, n);
       if (!r.ok) {
@@ -814,7 +1014,19 @@ test('random edit sequences: 600 sequences over the corpus always read back and 
       }
       const after = F.parseFlowchart(r.code);
       assert.ok(after, `${name} #${s} ${op}: reads back`);
-      assert.deepEqual(kept(after), keep, `${name} #${s} ${op}: unmanaged lines kept\n${r.code}`);
+      const was0 = F.parseFlowchart(code);
+      assert.deepEqual(kept(after).sort(), without(keep, droppedDirections(was0, after)).sort(), `${name} #${s} ${op}: unmanaged lines kept\n${r.code}`);
+      keep = kept(after);
+      // Attached lines follow: what left the diagram left their lists, nothing else changed.
+      const was = F.parseFlowchart(code);
+      const twins = new Set(was.edges.map((e) => `${e.from}>${e.to}`)).size < was.edges.length;
+      if (!twins) {
+        const goneIds = [...was.nodes.map((x) => x.id), ...was.subgraphs.map((g) => g.key)].filter((id) => !F.findNode(after, id) && !F.findSubgraph(after, id));
+        const left = after.edges.map((e) => `${e.from}>${e.to}`);
+        const goneEdges = was.edges.map((e) => `${e.from}>${e.to}`).filter((e) => { const k = left.indexOf(e); if (k === -1) return true; left.splice(k, 1); return false; });
+        if (op !== 'move' && op !== 'removeSubgraph' && op !== 'addSubgraph') assert.deepEqual(attachedView(after), attachedWithout(attachedView(was), goneIds, goneEdges), `${name} #${s} ${op}: attached lines follow\n${code}\n---\n${r.code}`);
+        attached++;
+      }
       // Inverse steps: adding then removing gives the text back exactly.
       if (op === 'addNode' || op === 'addIcon') {
         assert.equal(ok(F.removeNode(r.code, r.id)).code, code, `${name} #${s}: add then delete a node`);
@@ -844,4 +1056,5 @@ test('random edit sequences: 600 sequences over the corpus always read back and 
   }
   assert.ok(steps > 2500, `${steps} steps applied`);
   assert.ok(inverses > 400, `${inverses} inverse checks`);
+  assert.ok(attached > 2000, `${attached} attached-line checks`);
 });

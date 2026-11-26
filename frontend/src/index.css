@@ -541,7 +541,6 @@ a:hover,
 /* Form fields. */
 .builder-form input,
 .builder-form select,
-.builder-toolbar-select select,
 .icon-picker select,
 .icon-picker-controls input {
   min-width: 0;
@@ -556,7 +555,6 @@ a:hover,
 }
 
 .builder-form select,
-.builder-toolbar-select select,
 .icon-picker select {
   appearance: none;
   padding-right: 28px;
@@ -757,18 +755,41 @@ a:hover,
   gap: 6px;
 }
 
-/* A select in the toolbar (a flowchart's direction): its label in front, the same height as the buttons. */
-.builder-toolbar-select {
+/* A flowchart's direction: four arrows in one control, like the SVG/PNG choice; the current one is inked. */
+.builder-segmented {
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--muted);
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--btn-line);
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+  box-shadow: 0 1.5px 0 var(--pop);
 }
 
-.builder-toolbar-select select {
-  min-height: 30px;
-  font-size: 12px;
+.builder-segment {
+  min-width: 26px;
+  min-height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--dur) ease, color var(--dur) ease;
+}
+
+.builder-segment:hover {
+  background: var(--row-hover);
+  color: var(--ink);
+}
+
+.builder-segment[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--sheet);
 }
 
 .builder kbd,
@@ -2115,7 +2136,7 @@ a:hover,
   .menu-popup button,
   .builder-form input,
   .builder-form select,
-  .builder-toolbar-select select,
+  .builder-segment,
   .icon-picker select,
   .icon-picker-controls input {
     min-height: 40px;

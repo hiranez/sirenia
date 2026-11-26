@@ -4,9 +4,12 @@ import {
 } from '../utils/flowchartModel';
 import { drawFlowMarks, flowHit } from '../utils/flowchartPreview';
 import { quickAddFlowNode, subgraphFor } from '../utils/quickAdd';
+import { alsoText, deletedText } from '../utils/flowchartText';
 import FlowchartForm, { type FlowTarget } from './FlowchartForm';
 import type { Adapter, BuilderSelection, Row } from './builderTypes';
 
+/** The direction control: an arrow for each direction, named in words. */
+const DIRECTION_SYMBOLS: Record<string, string> = { TD: '↓', BT: '↑', LR: '→', RL: '←' };
 const arrow = (e: FlowEdge) => (e.startHead && e.endHead ? '↔' : e.endHead ? '→' : e.startHead ? '←' : '—');
 const plural = (n: number, one: string, many: string) => (n === 1 ? `1 ${one}` : `${n} ${many}`);
 
@@ -60,10 +63,10 @@ export function flowchartAdapter(code: string, model: FlowchartModel, hasPacks: 
             { label: 'Add subgraph', what: 'subgraph' },
             { label: 'Connect', what: 'edge' },
         ],
-        toolSelect: {
+        toolChoice: {
             label: 'Direction',
-            value: known ? direction : '',
-            options: [...(known ? [] : [{ value: '', label: 'As written in the code' }]), ...FLOW_DIRECTIONS],
+            value: known ? direction : null,
+            options: FLOW_DIRECTIONS.map((d) => ({ value: d.value, label: d.label, symbol: DIRECTION_SYMBOLS[d.value] })),
             set: (value) => ({
                 result: setDirection(code, value as FlowDirection),
                 message: `Direction: ${FLOW_DIRECTIONS.find((d) => d.value === value)!.label.toLowerCase()}.`,
@@ -96,6 +99,7 @@ export function flowchartAdapter(code: string, model: FlowchartModel, hasPacks: 
             if (!model.nodes.some((n) => n.id !== node.id)) return 'Add another node first, then connect the two.';
             return null;
         },
+        afterEdit: alsoText,
         connect: (fromId, toId) => {
             const from = findNode(model, fromId);
             if (!from) return null;
@@ -113,22 +117,30 @@ export function flowchartAdapter(code: string, model: FlowchartModel, hasPacks: 
             };
         },
         remove: (s, confirmed) => {
+            // Lines the builder cannot read that name the item: a second Delete deletes them too.
+            const linesKey = (id: string) => `lines:${id}`;
+            const ask = (result: ReturnType<typeof removeNode>, id: string) => (!result.ok && result.error.code === 'confirm' ? { key: linesKey(id), ask: result.error.message } : null);
             const edge = edgeOf(s);
-            if (edge) return { result: removeEdge(code, edge.key), message: `Deleted the connection ${edgeText(edge)}.` };
+            if (edge) {
+                const result = removeEdge(code, edge.key);
+                return { result, message: deletedText(`the connection ${edgeText(edge)}`, 0, result.ok ? result.also : undefined) };
+            }
             const sub = subOf(s);
             if (sub) {
                 const inside = holds(sub.key);
-                if (inside > 0 && confirmed !== sub.key) {
+                if (inside > 0 && confirmed !== sub.key && confirmed !== linesKey(sub.key)) {
                     const parent = sub.parent ? findSubgraph(model, sub.parent) : undefined;
                     return { key: sub.key, ask: `${subgraphName(sub)} holds ${plural(inside, 'item', 'items')}. Press Delete again to delete the subgraph; ${inside === 1 ? 'it moves' : 'they move'} to ${parent ? subgraphName(parent) : 'the top level'}.` };
                 }
-                return { result: removeSubgraph(code, sub.key), message: `Deleted ${subgraphName(sub)}.` };
+                const result = removeSubgraph(code, sub.key, confirmed === linesKey(sub.key));
+                const touching = model.edges.filter((e) => e.from === sub.key || e.to === sub.key).length;
+                return ask(result, sub.key) ?? { result, message: deletedText(subgraphName(sub), touching, result.ok ? result.also : undefined) };
             }
             const node = nodeOf(s);
             if (!node) return null;
+            const result = removeNode(code, node.id, confirmed === linesKey(node.id));
             const touching = model.edges.filter((e) => e.from === node.id || e.to === node.id).length;
-            const extra = touching === 0 ? '' : touching === 1 ? ' and its connection' : ` and its ${touching} connections`;
-            return { result: removeNode(code, node.id), message: `Deleted ${nodeName(node)}${extra}.` };
+            return ask(result, node.id) ?? { result, message: deletedText(nodeName(node), touching, result.ok ? result.also : undefined) };
         },
         hit: (svg, target, x, y) => flowHit(svg, model, target, x, y),
         endpointAt: (svg, target, x, y) => {

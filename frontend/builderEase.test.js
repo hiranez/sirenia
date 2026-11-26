@@ -219,7 +219,7 @@ test('flowchart quick add: an icon node for a pack match, a rectangle for plain 
   assert.equal(subgraphFor(m, null), null);
   const inside = ok(quickAddFlowNode(base, 'Next', null, subgraphFor(m, 'a')));
   assert.equal(inside.code, 'flowchart LR\n  subgraph stage ["Stage"]\n    a["A"]\n    next["Next"]\n  end\n  a --> b\n');
-  assert.match(refused(quickAddFlowNode(base, 'Say "hi"', null, null), 'label'), /double quotes/);
+  assert.equal(ok(quickAddFlowNode(base, 'Say "hi"', null, null)).code, `${base}  say_hi["Say #quot;hi#quot;"]\n`);
 });
 
 test('flowchart starters: each parses with every line managed, round-trips, and has what its card says', async () => {
@@ -243,4 +243,17 @@ test('flowchart starters: each parses with every line managed, round-trips, and 
   const stages = F.parseFlowchart(FLOWCHART_TEMPLATES[2].code);
   assert.deepEqual(stages.subgraphs.map((g) => g.title), ['Plan', 'Build', 'Release']);
   assert.ok(stages.nodes.every((n) => n.parent !== null), 'every step is in a stage');
+});
+
+test('flowchart status texts: what else an edit changed', async () => {
+  const { deletedText, alsoText } = await import('./src/utils/flowchartText.ts');
+  const also = (deleted = {}, updated = {}, lines = []) => ({ deleted, updated, lines });
+  assert.equal(deletedText('Start', 0), 'Deleted Start.');
+  assert.equal(deletedText('Start', 1), 'Deleted Start and its connection.');
+  assert.equal(deletedText('Start', 2, also({ style: 1 })), 'Deleted Start, its 2 connections and 1 style line.');
+  assert.equal(deletedText('Start', 0, also({ style: 1 })), 'Deleted Start and 1 style line.');
+  assert.equal(deletedText('Start', 1, also({ click: 1, linkStyle: 2 }, { class: 1 }, [6])), 'Deleted Start, its connection, 1 click line, 2 linkStyle lines and line 7. Updated 1 class line.');
+  assert.equal(deletedText('Stage', 0, also({ direction: 1 })), 'Deleted Stage and its direction line.');
+  assert.equal(alsoText(also({}, { linkStyle: 1 })), ' Updated 1 linkStyle line.');
+  assert.equal(alsoText(undefined), '');
 });

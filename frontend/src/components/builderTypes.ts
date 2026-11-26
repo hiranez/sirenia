@@ -3,6 +3,7 @@
 // owns the state (selection, connect mode, forms, status line) and the keyboard.
 import type React from 'react';
 import type { CatalogEntry } from '../utils/iconPicker';
+import type { Also } from '../utils/flowchartModel';
 
 /** The item selected in the builder. An architecture connection has no id: its line, and the line's text to find it again. */
 export type BuilderSelection =
@@ -11,7 +12,7 @@ export type BuilderSelection =
     | { kind: 'link'; key: string };
 
 /** An edit's result, as both models return it. */
-export type Result = { ok: true; code: string; id?: string; key?: string; line?: number } | { ok: false; error: { code: string; message: string } };
+export type Result = { ok: true; code: string; id?: string; key?: string; line?: number; also?: Also } | { ok: false; error: { code: string; message: string } };
 
 /** What a form or an action selects afterwards; `{ kind: 'edge', line }` is completed by the shell. */
 export type NextSelection = { kind: 'node'; id: string } | { kind: 'edge'; line: number } | { kind: 'link'; key: string } | null;
@@ -71,8 +72,10 @@ export interface Adapter {
     /** The group or subgraph quick add puts a node in, by name; null is the top level. */
     placeName: (selection: BuilderSelection | null) => string | null;
     tools: { label: string; what: string }[];
-    /** A select in the toolbar (the flowchart's direction). */
-    toolSelect?: { label: string; value: string; options: { value: string; label: string }[]; set: (value: string) => Outcome };
+    /** A choice of buttons in the toolbar (the flowchart's direction); `value` null: none of them. */
+    toolChoice?: { label: string; value: string | null; options: { value: string; label: string; symbol: string }[]; set: (value: string) => Outcome };
+    /** A sentence about other lines an edit changed with it (from the edit's result), appended to the status. */
+    afterEdit?: (also: Also | undefined) => string;
     addTarget: (what: string, selection: BuilderSelection | null) => unknown;
     editTarget: (selection: BuilderSelection) => unknown;
     renderForm: (key: string, props: FormProps) => React.ReactNode;

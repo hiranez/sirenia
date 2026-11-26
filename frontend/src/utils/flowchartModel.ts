@@ -6,15 +6,23 @@
  * alone. The text is split into statements (lines, and `;` between statements on one line). A
  * statement is managed when it is one of:
  *   header        flowchart LR | graph TD;              (the direction is optional)
- *   nodes         A | A[Label] | A("Label") | A@{ icon: "p:x", label: "Label" } | A:::cls
- *   chain         A --> B | A -->|Yes| B | A -- Yes --> B | A[Start] --> B{Ask} -.-> C
- *                 (any number of links; `A & B --> C` is read, but only its nodes can be edited)
+ *   nodes         A | A[Label] | A("Label") | A["`markdown`"] | A@{ icon: "p:x", label: "Label" } | A:::cls
+ *   chain         A --> B | A -->|Yes| B | A -- Yes --> B | A[Start] --> B{Ask} -.-> C | A & B --> C
+ *                 (a connection of an & statement is changed by writing it one statement per connection)
  *   subgraph      subgraph id [Title] | subgraph id["Title"] | subgraph id | subgraph Two words
  *   end
- * Everything else (style, classDef, class, linkStyle, click, direction, markdown strings, edge ids,
- * unknown shapes, anything the reader is not sure about) is `other`: kept byte for byte and never
- * rewritten. On a line with one statement the reader does not know, every statement of the line is
- * left alone, because `;` inside unknown syntax may not separate statements.
+ * Labels are read with Mermaid's character codes decoded (#quot; is ") and written with them where
+ * needed (encodeLabel); markdown labels are read but never rewritten.
+ *
+ * Attached lines are read for what they name: `style id …`, `class a,b name`, `click id …` and
+ * `linkStyle 0,2 …`. They change only together with what they name: a deleted node leaves their
+ * lists, and linkStyle numbers follow their connections.
+ *
+ * Everything else (classDef, direction, edge ids, unknown shapes, anything the reader is not sure
+ * about) is `other`: kept byte for byte and never rewritten (a subgraph's own direction line is
+ * deleted with the subgraph). On a line with one statement the reader
+ * does not know, every statement of the line is left alone, because `;` inside unknown syntax may not
+ * separate statements.
  *
  * The rules that need the whole diagram follow Mermaid's flowchart database: a node belongs to the
  * first subgraph, in the order the subgraphs end, whose own statements mention it; the last label or
@@ -22,7 +30,8 @@
  *
  * Every edit returns new text that differs from the old only where it had to, and checks its own
  * result: the new text must read back with exactly the intended change, and every statement the
- * builder does not manage must be unchanged. Errors are values, never exceptions.
+ * builder does not manage must be unchanged (attached lines change only as described). Errors are
+ * values, never exceptions.
  */
 import { scanDiagram, uniqueId } from './iconPicker.ts';
 
@@ -87,7 +96,7 @@ export interface NodeRef {
     start: number; end: number;
     shape: ShapeName | null;
     /** The bracket label: as written between the brackets, and as Mermaid shows it. */
-    text: { raw: string; value: string } | null;
+    text: { raw: string; value: string; markdown?: boolean } | null;
     data: ShapeData | null;
     /** `:::name` as written, or ''. */
     cls: string;
@@ -100,6 +109,8 @@ export interface Link {
     startHead: StartHead;
     endHead: EndHead;
     label: string | null;
+    /** The label is a markdown string (``"`…`"``): read, shown, never rewritten. */
+    markdown?: boolean;
     form: 'plain' | 'pipe' | 'inline';
     /** The arrow as written (`-->`, `-.->`; for `-- text -->` both parts). */
     token: string;
@@ -109,7 +120,18 @@ export interface Link {
     pipeEnd: number;
 }
 
-export type OtherRole = 'unmanaged' | 'direction' | 'accessibility';
+export type OtherRole = 'unmanaged' | 'direction' | 'accessibility' | 'attached';
+/**
+ * A line attached to nodes or connections: `style a …`, `class a,b name`, `click a …` name node or
+ * subgraph ids, `linkStyle 0,2 …` names connections by number. The builder changes them only together
+ * with what they name (a deleted node leaves the list; connections that are renumbered keep their style).
+ */
+export interface Attach {
+    keyword: 'style' | 'class' | 'click' | 'linkStyle';
+    /** The names in the list, with their offsets in the line. */
+    items: { value: string; start: number; end: number }[];
+    listStart: number; listEnd: number;
+}
 interface Base {
     index: number;
     line: number;
@@ -126,12 +148,13 @@ export type SubgraphStatement = Base & {
     written: string | null;
     title: string;
     form: 'id-title' | 'id' | 'title' | 'none' | 'unknown';
+    markdown?: boolean;
     /** Offsets of the part after `subgraph `. */
     restStart: number;
     close: number | null;
 };
 export type EndStatement = Base & { kind: 'end'; open: number | null };
-export type OtherStatement = Base & { kind: 'other'; role: OtherRole };
+export type OtherStatement = Base & { kind: 'other'; role: OtherRole; attach?: Attach };
 export type Statement = HeaderStatement | NodesStatement | SubgraphStatement | EndStatement | OtherStatement;
 
 export type LineRole = 'blank' | 'comment' | 'directive' | 'preamble' | 'statements' | 'unmanaged';
@@ -148,6 +171,8 @@ export interface FlowNode {
     def: { statement: number; ref: NodeRef } | null;
     /** How many references carry a definition. */
     defCount: number;
+    /** The label is a markdown string: it is edited in the Code tab. */
+    markdown: boolean;
     parent: string | null;
 }
 export interface FlowEdge {
@@ -160,6 +185,7 @@ export interface FlowEdge {
     link: number;
     /** Written with `&` together with other edges: its label and line cannot be changed here. */
     shared: boolean;
+    markdown: boolean;
     stroke: Stroke; startHead: StartHead; endHead: EndHead;
     label: string | null;
 }
@@ -172,6 +198,7 @@ export interface FlowSubgraph {
     close: number | null;
     parent: string | null;
     managed: boolean;
+    markdown: boolean;
 }
 
 export interface FlowchartModel {
@@ -190,9 +217,11 @@ export interface FlowchartModel {
     linkStyleMax: number;
 }
 
-export type EditErrorCode = 'not-flowchart' | 'label' | 'icon' | 'parent' | 'cycle' | 'endpoint' | 'not-found' | 'in-use' | 'unmanaged' | 'duplicate' | 'invalid';
+export type EditErrorCode = 'not-flowchart' | 'label' | 'icon' | 'parent' | 'cycle' | 'endpoint' | 'not-found' | 'in-use' | 'unmanaged' | 'duplicate' | 'invalid' | 'confirm';
+/** Lines changed together with the item an edit concerns: deleted and updated ones by keyword, and whole lines deleted. */
+export interface Also { deleted: Record<string, number>; updated: Record<string, number>; lines: number[] }
 export interface EditError { code: EditErrorCode; message: string }
-export type EditResult = { ok: true; code: string; id?: string; key?: string } | { ok: false; error: EditError };
+export type EditResult = { ok: true; code: string; id?: string; key?: string; also?: Also } | { ok: false; error: EditError };
 
 // ---- reading ----------------------------------------------------------------------------------------
 
@@ -235,8 +264,18 @@ const OPENERS: readonly [string, ShapeName[]][] = [
 // Text inside brackets without quotes: no brackets, pipes or quotes (the lexer reads those as tokens).
 const PLAIN_TEXT = /^[^[\](){}|"]+$/;
 
+/** A markdown string ``"`…`"`` at `at` on one line: its text (no backtick or quote inside, as Mermaid's lexer reads it). */
+function readMarkdown(s: string, at: number): { raw: string; value: string; end: number } | null {
+    if (!s.startsWith('"`', at)) return null;
+    const close = s.indexOf('`"', at + 2);
+    if (close === -1) return null;
+    const value = s.slice(at + 2, close);
+    if (/[`"]/.test(value) || value.trim() === '') return null;
+    return { raw: s.slice(at, close + 2), value, end: close + 2 };
+}
+
 /** A bracket shape and its label at `at` (just after the id), or null. */
-function readShape(s: string, at: number): { shape: ShapeName; raw: string; value: string; end: number } | null {
+function readShape(s: string, at: number): { shape: ShapeName; raw: string; value: string; end: number; markdown?: boolean } | null {
     for (const [open, shapes] of OPENERS) {
         if (!s.startsWith(open, at)) continue;
         if (s.startsWith('[|', at) || s.startsWith('(-', at)) return null;
@@ -245,6 +284,11 @@ function readShape(s: string, at: number): { shape: ShapeName; raw: string; valu
             const close = shapeOf(shape).close;
             let raw: string;
             let end: number;
+            const md = readMarkdown(s, from);
+            if (md) {
+                if (!s.startsWith(close, md.end)) continue;
+                return { shape, raw: md.raw, value: md.value, end: md.end + close.length, markdown: true };
+            }
             if (s[from] === '"') {
                 const q = s.indexOf('"', from + 1);
                 if (q === -1 || s[from + 1] === '`' || !s.startsWith(close, q + 1)) continue;
@@ -260,7 +304,7 @@ function readShape(s: string, at: number): { shape: ShapeName; raw: string; valu
                 if (open === '(' && raw.startsWith('-')) continue;
                 end = stop + close.length;
             }
-            const value = raw.startsWith('"') ? raw.slice(1, -1) : raw.trim();
+            const value = decodeLabel(raw.startsWith('"') ? raw.slice(1, -1) : raw.trim());
             if (value.trim() === '') return null;
             return { shape, raw, value, end };
         }
@@ -345,7 +389,7 @@ function readRef(s: string, at: number): NodeRef | null {
         const read = readShape(s, i);
         if (!read) return null;
         shape = read.shape;
-        text = { raw: read.raw, value: read.value };
+        text = { raw: read.raw, value: read.value, ...(read.markdown ? { markdown: true } : {}) };
         i = read.end;
     }
     let cls = '';
@@ -394,17 +438,25 @@ function readLink(s: string, at: number): Link | null {
             // `|text|` or `|"text"|`, then spaces.
             let label: string;
             let close: number;
+            const md = readMarkdown(s, i + 1);
+            if (md) {
+                if (s[md.end] !== '|') return null;
+                const after = md.end + 1;
+                if (/\s/.test(s[after] ?? '') && /\s/.test(s[after + 1] ?? '')) return null;
+                const end = after < s.length && /\s/.test(s[after]) ? after + 1 : after;
+                return { start: at, end, stroke: rule.stroke, ...h, label: md.value, markdown: true, form: 'pipe', token, tokenStart, tokenEnd, pipeEnd: md.end + 1 };
+            }
             if (s[i + 1] === '"') {
                 const q = s.indexOf('"', i + 2);
                 if (q === -1 || s[i + 2] === '`' || s[q + 1] !== '|') return null;
-                label = s.slice(i + 2, q);
+                label = decodeLabel(s.slice(i + 2, q));
                 close = q + 1;
             } else {
                 close = s.indexOf('|', i + 1);
                 if (close === -1) return null;
                 const raw = s.slice(i + 1, close);
                 if (!PLAIN_TEXT.test(raw) || raw.includes('~~~') || raw.includes('@')) return null;
-                label = raw.trim();
+                label = decodeLabel(raw.trim());
             }
             if (label.trim() === '') return null;
             // After the closing pipe Mermaid takes one space at most: `-->|x|  B` is a syntax error.
@@ -416,10 +468,17 @@ function readLink(s: string, at: number): Link | null {
         // `-- text -->`: characters up to the first closing arrow, as the lexer reads them.
         let i = at + m[0].length;
         let label: string;
-        if (s[i] === '"') {
+        let markdown = false;
+        const md = readMarkdown(s, i);
+        if (md) {
+            label = md.value;
+            markdown = true;
+            i = md.end;
+            if (!sticky(rule.end!, s, i)) return null;
+        } else if (s[i] === '"') {
             const q = s.indexOf('"', i + 1);
             if (q === -1 || s[i + 1] === '`') return null;
-            label = s.slice(i + 1, q);
+            label = decodeLabel(s.slice(i + 1, q));
             i = q + 1;
             if (!sticky(rule.end!, s, i)) return null;
         } else {
@@ -429,7 +488,7 @@ function readLink(s: string, at: number): Link | null {
                 i++;
             }
             if (i >= s.length) return null;
-            label = s.slice(from, i).trim();
+            label = decodeLabel(s.slice(from, i).trim());
             if (label.includes('~~~') || label.includes('@') || label.includes('|')) return null;
         }
         const end = sticky(rule.end!, s, i)!;
@@ -437,7 +496,7 @@ function readLink(s: string, at: number): Link | null {
         const token = `${m[0].trim()} ${end[0].trim()}`;
         const h = heads(m[1], end[0].trim());
         const tokenEnd = i + end[0].trimEnd().length;
-        return { start: at, end: i + end[0].length, stroke: rule.stroke, ...h, label, form: 'inline', token, tokenStart, tokenEnd, pipeEnd: tokenEnd };
+        return { start: at, end: i + end[0].length, stroke: rule.stroke, ...h, label, ...(markdown ? { markdown } : {}), form: 'inline', token, tokenStart, tokenEnd, pipeEnd: tokenEnd };
     }
     return null;
 }
@@ -511,7 +570,7 @@ function readNodes(s: string, at: number, stop: number): { groups: NodeRef[][]; 
 }
 
 /** `subgraph …` (the statement text from `at`): its id as written, title and form. */
-function readSubgraph(s: string, at: number, stop: number): Pick<SubgraphStatement, 'written' | 'title' | 'form' | 'restStart'> {
+function readSubgraph(s: string, at: number, stop: number): Pick<SubgraphStatement, 'written' | 'title' | 'form' | 'restStart' | 'markdown'> {
     const restStart = at + 'subgraph'.length;
     const rest = s.slice(restStart, stop).trim();
     const restAt = s.indexOf(rest, restStart);
@@ -522,13 +581,15 @@ function readSubgraph(s: string, at: number, stop: number): Pick<SubgraphStateme
         const m = /^\s*\[(.*)\]$/.exec(rest.slice(id.length));
         if (m) {
             const inner = m[1];
-            if (/^"[^"]*"$/.test(inner) && inner[1] !== '`' && inner.length > 2) return { written: id, title: inner.slice(1, -1), form: 'id-title', restStart: restAt };
-            if (PLAIN_TEXT.test(inner) && inner.trim() !== '' && !inner.includes('@')) return { written: id, title: inner.trim(), form: 'id-title', restStart: restAt };
+            const md = readMarkdown(inner, 0);
+            if (md && md.end === inner.length) return { written: id, title: md.value, form: 'id-title', restStart: restAt, markdown: true };
+            if (/^"[^"]*"$/.test(inner) && inner[1] !== '`' && inner.length > 2) return { written: id, title: decodeLabel(inner.slice(1, -1)), form: 'id-title', restStart: restAt };
+            if (PLAIN_TEXT.test(inner) && inner.trim() !== '' && !inner.includes('@')) return { written: id, title: decodeLabel(inner.trim()), form: 'id-title', restStart: restAt };
         }
     }
     // Words without an id: Mermaid makes an id up when there is a space (subGraph0, subGraph1, …).
     if (/^[\p{L}\p{N}_]+(?:[ \t]+[\p{L}\p{N}_]+)+$/u.test(rest) && rest.split(/\s+/).every((w) => isId(w) || !/^[\w-]+$/.test(w))) {
-        return { written: null, title: rest, form: 'title', restStart: restAt };
+        return { written: null, title: decodeLabel(rest), form: 'title', restStart: restAt };
     }
     return { written: null, title: rest, form: 'unknown', restStart: restAt };
 }
@@ -658,6 +719,33 @@ export function parseFlowchart(code: string): FlowchartModel | null {
     return model;
 }
 
+const NAME = String.raw`[A-Za-z0-9_]+(?:-[A-Za-z0-9_]+)*`;
+const ATTACH_RES: readonly RegExp[] = [
+    // Mermaid's style takes one id (`style a,b …` styles nothing); class takes a list.
+    new RegExp(String.raw`^(style)([\t ]+)(${NAME})[\t ]+\S`),
+    new RegExp(String.raw`^(class)([\t ]+)(${NAME}(?:,${NAME})*)[\t ]+[\w-]+$`),
+    new RegExp(String.raw`^(click)([\t ]+)(${NAME})(?=[\t ]|$)`),
+    /^(linkStyle)([\t ]+)(\d+(?:,\d+)*)[\t ]+\S/,
+];
+
+/** `style`, `class`, `click` or `linkStyle` with the list of what it names, or null. */
+function readAttach(text: string, a: number, b: number): Attach | null {
+    const s = text.slice(a, b);
+    for (const re of ATTACH_RES) {
+        const m = re.exec(s);
+        if (!m) continue;
+        const listStart = a + m[1].length + m[2].length;
+        let at = listStart;
+        const items = m[3].split(',').map((value) => {
+            const item = { value, start: at, end: at + value.length };
+            at += value.length + 1;
+            return item;
+        });
+        return { keyword: m[1] as Attach['keyword'], items, listStart, listEnd: listStart + m[3].length };
+    }
+    return null;
+}
+
 type Unplaced<T> = T extends unknown ? Omit<T, 'index' | 'parent'> : never;
 type ReadStatement =
     | Omit<HeaderStatement, keyof Base>
@@ -678,6 +766,8 @@ function readStatement(text: string, a: number, b: number, isHeader: boolean): R
     if (/^subgraph(?:[\t ]|$)/.test(s)) return { kind: 'subgraph', ...readSubgraph(text, a, b), close: null };
     if (DIRECTION_RULE.test(s) && /^direction\b/.test(s)) return { kind: 'other', role: 'direction' };
     if (/^acc(?:Title|Descr)\s*:/.test(s)) return { kind: 'other', role: 'accessibility' };
+    const attach = readAttach(text, a, b);
+    if (attach) return { kind: 'other', role: 'attached', attach };
     if (OTHER_START.test(s) || DIRECTION_RULE.test(s)) return { kind: 'other', role: 'unmanaged' };
     // `@` outside quotes and `@{` is an edge id (or worse) to the lexer.
     if (/@(?!\{)/.test(s.replace(/"[^"]*"/g, '""'))) return { kind: 'other', role: 'unmanaged' };
@@ -700,6 +790,7 @@ function derive(model: FlowchartModel): void {
         key: keyOf.get(sg.index)!,
         id: sg.form === 'unknown' ? null : keyOf.get(sg.index)!,
         title: sg.title,
+        markdown: !!sg.markdown,
         statement: sg.index,
         close: sg.close,
         parent: sg.parent === null ? null : keyOf.get(sg.parent)!,
@@ -715,12 +806,13 @@ function derive(model: FlowchartModel): void {
             if (sgIds.has(ref.id)) continue;
             let node = nodes.get(ref.id);
             if (!node) {
-                node = { id: ref.id, label: null, shape: 'rect', icon: null, mentions: [], def: null, defCount: 0, parent: null };
+                node = { id: ref.id, label: null, shape: 'rect', icon: null, mentions: [], def: null, defCount: 0, markdown: false, parent: null };
                 nodes.set(ref.id, node);
             }
             if (node.mentions.at(-1) !== st.index) node.mentions.push(st.index);
             if (ref.text) {
                 node.label = ref.text.value;
+                node.markdown = !!ref.text.markdown;
                 node.shape = ref.shape!;
             }
             if (ref.data) {
@@ -733,7 +825,10 @@ function derive(model: FlowchartModel): void {
                     node.icon = icon;
                     node.shape = 'icon';
                 }
-                if (label) node.label = label;
+                if (label) {
+                    node.label = decodeLabel(label);
+                    node.markdown = false;
+                }
                 else if (icon && node.label === null) node.label = '';
             }
             if (ref.text || ref.data) {
@@ -751,7 +846,7 @@ function derive(model: FlowchartModel): void {
                     model.edges.push({
                         key: JSON.stringify([a.id, b.id, n]), domId: `L_${a.id}_${b.id}_${n === 0 ? 0 : n + 1}`,
                         from: a.id, to: b.id, statement: st.index, link: k, shared,
-                        stroke: link.stroke, startHead: link.startHead, endHead: link.endHead, label: link.label,
+                        stroke: link.stroke, startHead: link.startHead, endHead: link.endHead, label: link.label, markdown: !!link.markdown,
                     });
                 }
             }
@@ -859,23 +954,45 @@ const LINE_BREAK = /[\n\r\v\f\u0085\u2028\u2029]/;
 /** A label as it is written: trimmed, runs of spaces as one (Mermaid shows them as one anyway). */
 export const normalizeLabel = (label: string): string => label.trim().replace(/\s+/g, ' ');
 
-/**
- * Why `label` cannot be written so that the preview shows exactly this text, or null. The rules come
- * from what Mermaid 11 does with SVG labels: it has no escape for a double quote (`#quot;` shows as
- * `&quot;`), reads `<…>` as markup and drops a lone `>`, turns `#name;` and `&name;` into characters,
- * starts a markdown string at a leading backtick, and reads `direction LR` anywhere on a line.
- * `optional`: empty text means no label.
- */
+/** Why `label` cannot be written, or null: only an empty label (unless `optional`) or one over several lines. */
 export function labelProblem(label: string, optional = false): string | null {
     if (LINE_BREAK.test(label.trim())) return 'A label has to fit on one line.';
-    const text = normalizeLabel(label);
-    if (text === '') return optional ? null : 'Enter a label.';
-    if (text.includes('"')) return 'A label cannot contain double quotes ("). Use \' or “ ” instead.';
-    if (/[<>]/.test(text)) return 'A label cannot contain < or >.';
-    if (/[#&]#?\w+;/.test(text)) return 'A label cannot contain # or & followed by a word and ; (Mermaid reads that as a special character).';
-    if (text.startsWith('`')) return 'A label cannot start with `.';
-    if (DIRECTION_RULE.test(text)) return 'A label cannot contain “direction” followed by TB, BT, LR, RL or TD.';
+    if (normalizeLabel(label) === '') return optional ? null : 'Enter a label.';
     return null;
+}
+
+const allowedCode = (n: number) => (n >= 0x20 && n <= 0xd7ff && !(n >= 0x7f && n <= 0x9f)) || (n >= 0xe000 && n <= 0xfffd) || (n >= 0x10000 && n <= 0x10ffff);
+const CODES: Record<string, string> = { '"': '#quot;', '<': '#lt;', '>': '#gt;', '&': '#38;', '#': '#35;', '`': '#96;' };
+
+/**
+ * A label as Mermaid's syntax has to see it so that the picture shows exactly `text` (with the
+ * completion of codes in labelEntities.ts). In Mermaid 11's SVG labels:
+ *   "  -> #quot;   (a quoted label cannot hold a quote)
+ *   <  -> #lt;     >  -> #gt;   (a tag would be dropped, and so would a lone < or >)
+ *   &  -> #38;     before word; or #12; (Mermaid would read a character code; not #amp;, which
+ *                  would make a typed "&quot;" show as a quote)
+ *   #  -> #35;     before word; (the same)
+ *   `  -> #96;     at the start (a backtick after the quote starts a markdown string)
+ *   the space in "direction LR" (TB, BT, RL, TD) -> #32;   (Mermaid reads that anywhere on a line)
+ *   :  -> #58;     when "style" or "classDef" comes before it (Mermaid's preprocessing would cut a ;)
+ * Everything else is written as it is.
+ */
+export function encodeLabel(text: string): string {
+    let out = text.replace(/["<>]|&(?=#?\w+;)|#(?=\w+;)|^`/g, (c) => CODES[c]);
+    out = out.replace(/direction\s+(?=TB|BT|RL|LR|TD)/g, 'direction#32;');
+    if (/(?:style|classDef).*:/.test(out)) out = out.replace(/:/g, '#58;');
+    return out;
+}
+
+/** The text a label shows: the codes encodeLabel writes (and decimal codes) decoded; other named codes stay. */
+export function decodeLabel(text: string): string {
+    return text.replace(/#(quot|lt|gt|amp|\d{1,7});/g, (m, code: string) => {
+        if (code === 'quot') return '"';
+        if (code === 'lt') return '<';
+        if (code === 'gt') return '>';
+        if (code === 'amp') return '&';
+        return allowedCode(Number(code)) ? String.fromCodePoint(Number(code)) : m;
+    });
 }
 
 /** Why `icon` is not a pack icon name (`prefix:name`), or null. */
@@ -886,12 +1003,14 @@ export function iconProblem(icon: string): string | null {
 // ---- writing --------------------------------------------------------------------------------------
 
 /** `id` with a bracket shape and a quoted label (quotes keep punctuation in the label plain text). */
-const shapeText = (shape: ShapeName, label: string) => `${shapeOf(shape).open}"${label}"${shapeOf(shape).close}`;
+const shapeText = (shape: ShapeName, label: string) => `${shapeOf(shape).open}"${encodeLabel(label)}"${shapeOf(shape).close}`;
 /** Icon labels are markdown unless told otherwise; plain names are written the way the icon picker writes them. */
 const needsPlainText = (label: string) => /[*_~`\\]/.test(label) || /^(?:[-+#]|\d+[.)])(?:\s|$)/.test(label);
 const yamlString = (text: string) => `"${text.replace(/\\/g, '\\\\')}"`;
+/** A label in an @{ } block: encoded, then as a YAML string. */
+const yamlLabel = (label: string) => yamlString(encodeLabel(label));
 const dataText = (icon: string, label: string) =>
-    `@{ icon: "${icon}", label: ${yamlString(label)}${needsPlainText(label) ? ', labelType: "text"' : ''} }`;
+    `@{ icon: "${icon}", label: ${yamlLabel(label)}${needsPlainText(label) ? ', labelType: "text"' : ''} }`;
 
 function arrowToken(stroke: Stroke, startHead: StartHead, endHead: EndHead): string {
     if (stroke === 'invisible') return '~~~';
@@ -900,7 +1019,7 @@ function arrowToken(stroke: Stroke, startHead: StartHead, endHead: EndHead): str
     return `${startHead}--${endHead === '' ? '-' : endHead}`;
 }
 const styleToken = (style: LineStyle) => LINE_STYLES.find((s) => s.value === style)!.token;
-const pipeLabel = (label: string | null) => (label ? `|"${label}"|` : '');
+const pipeLabel = (label: string | null) => (label ? `|"${encodeLabel(label)}"|` : '');
 /** The spaces after a link: Mermaid takes one at most after a pipe label (`-->|x|  B` is a syntax error). */
 const afterPipe = (label: string | null, spaces: string) => (label && spaces.length > 1 ? ' ' : spaces);
 
@@ -949,6 +1068,12 @@ class Draft {
         while (k > 0 && /[\t ]/.test(text[k - 1])) k--;
         if (k > 0 && text[k - 1] === ';') return this.replace(st.line, k - 1, st.end, '');
         this.replace(st.line, st.start, st.end, '');
+    }
+
+    /** Take over the changes and new lines of another draft of the same text. */
+    adopt(other: Draft): void {
+        this.changes.push(...other.changes);
+        this.inserts.push(...other.inserts);
     }
 
     /** A new line after original line `after` (lines inserted after the same line keep their order). */
@@ -1059,34 +1184,195 @@ function keptTexts(model: FlowchartModel, withHeader: boolean): string[] {
     return out;
 }
 
-const LINK_STYLE_MESSAGE = 'A linkStyle line styles connections by their number, and this change would renumber them. Change that line in the Code tab first.';
 const STYLE_RULE = /(?:style|classDef).*:\S*#.*;/;
+
+/** How an edit changes the connections, so that linkStyle numbers can follow them. */
+export interface EdgeChange {
+    /** Connections deleted (they leave linkStyle lists). */
+    removed?: FlowEdge[];
+    /** A connection written again at the end with other ends: its style follows it to `key`. */
+    moved?: { edge: FlowEdge; key: string };
+    /** Statements were moved: connections are matched by what they are, not by place. */
+    reorder?: boolean;
+}
+
+/** A kept line or statement the edit changes: its text before, and after (null: deleted). */
+interface KeptChange { from: string; to: string | null }
+
+const emptyAlso = (): Also => ({ deleted: {}, updated: {}, lines: [] });
+const count = (rec: Record<string, number>, key: string) => { rec[key] = (rec[key] ?? 0) + 1; };
+
+/** Text that may hold a connection (outside quotes). */
+const mayLink = (text: string) => /--|==|-\.|~~~/.test(text.replace(/"[^"]*"/g, '""'));
+
+/**
+ * Where each connection of `before` is in `after` (by index; null: deleted), or why that cannot be
+ * known. Only needed when linkStyle lines name connections by number.
+ */
+function mapEdges(before: FlowchartModel, after: FlowchartModel, change: EdgeChange): Map<number, number | null> | string {
+    const same = (a: FlowEdge, b: FlowEdge) => a.from === b.from && a.to === b.to;
+    const map = new Map<number, number | null>();
+    if (!change.removed && !change.moved && !change.reorder && before.edges.length === after.edges.length && before.edges.every((e, i) => same(e, after.edges[i]))) {
+        before.edges.forEach((_, i) => map.set(i, i));
+        return map;
+    }
+    const unreadLinkStyle = before.statements.find((st) => st.kind === 'other' && !st.attach && /^linkStyle\b(?!\s+default\b)/.test(stmtText(before, st)));
+    if (unreadLinkStyle) return `Line ${unreadLinkStyle.line + 1} (linkStyle) is written in a form the builder does not read, so it cannot keep its numbers right. Change that line in the Code tab first.`;
+    const hidden = before.unmanaged.find((line) => before.statements.every((st) => st.line !== line || st.kind !== 'other' || !st.attach) && mayLink(stripCr(before.lines[line])));
+    if (hidden !== undefined) return `Line ${hidden + 1} may hold connections the builder does not read, so it cannot keep the linkStyle numbers right. Change that line in the Code tab first.`;
+    const ambiguous = 'Two connections look the same, so the builder cannot tell which one a linkStyle line styles after this change. Change it in the Code tab.';
+    if (change.reorder) {
+        const styled = new Set(before.statements.flatMap((st) => (st.kind === 'other' && st.attach?.keyword === 'linkStyle' ? st.attach.items.map((x) => Number(x.value)) : [])));
+        const used = new Set<number>();
+        for (const [i, e] of before.edges.entries()) {
+            const twins = before.edges.filter((x) => edgeSig(x) === edgeSig(e)).length;
+            if (twins > 1 && styled.has(i)) return ambiguous;
+            const j = after.edges.findIndex((x, k) => !used.has(k) && edgeSig(x) === edgeSig(e));
+            if (j === -1) return ambiguous;
+            used.add(j);
+            map.set(i, j);
+        }
+        return map;
+    }
+    const removed = new Set((change.removed ?? []).map((e) => before.edges.indexOf(e)));
+    const movedFrom = change.moved ? before.edges.indexOf(change.moved.edge) : -1;
+    const movedTo = change.moved ? after.edges.findIndex((e) => e.key === change.moved!.key) : -1;
+    let j = 0;
+    for (let i = 0; i < before.edges.length; i++) {
+        if (removed.has(i)) { map.set(i, null); continue; }
+        if (i === movedFrom) { map.set(i, movedTo); continue; }
+        if (j === movedTo) j++;
+        if (!after.edges[j] || !same(before.edges[i], after.edges[j])) return ambiguous;
+        map.set(i, j++);
+    }
+    return map;
+}
 
 /**
  * The finished edit: refused unless the new text reads back as a flowchart, keeps every line it does
- * not manage, keeps the numbers linkStyle lines use, and `check` finds the intended change.
+ * not manage (apart from the `kept` changes it makes to attached lines), and `check` finds the
+ * intended change. linkStyle numbers are rewritten so that every style stays on its connection.
  */
-function finish(before: FlowchartModel, code: string, check: (after: FlowchartModel) => string | null, extra: { id?: string; key?: string } = {}, header = false): EditResult {
+function finish(
+    before: FlowchartModel, code: string, check: (after: FlowchartModel) => string | null,
+    extra: { id?: string; key?: string } = {}, header = false,
+    opts: { kept?: KeptChange[]; edges?: EdgeChange; also?: Also } = {},
+): EditResult {
     if (code === before.lines.join('\n')) return { ok: true, code, ...extra };
-    const after = parseFlowchart(code);
+    let after = parseFlowchart(code);
     if (!after) return fail('invalid', 'The change would break the diagram.');
-    if (JSON.stringify(keptTexts(before, !header)) !== JSON.stringify(keptTexts(after, !header))) {
+    const kept = [...(opts.kept ?? [])];
+    const also = opts.also ?? emptyAlso();
+    const styles = after.statements.filter((st): st is OtherStatement => st.kind === 'other' && st.attach?.keyword === 'linkStyle');
+    const numbered = before.statements.some((st) => st.kind === 'other' && /^linkStyle\b(?!\s+default\b)/.test(stmtText(before, st)));
+    if (numbered) {
+        const map = mapEdges(before, after, opts.edges ?? {});
+        if (typeof map === 'string') return fail('in-use', map);
+        const d = new Draft(after);
+        for (const st of styles) {
+            const numbers = st.attach!.items.map((x) => Number(x.value));
+            const next = numbers.map((n) => (map.has(n) ? map.get(n)! : n)).filter((n): n is number => n !== null);
+            if (JSON.stringify(next) === JSON.stringify(numbers)) continue;
+            const text = stmtText(after, st);
+            if (next.length === 0) {
+                d.remove(st);
+                kept.push({ from: text, to: null });
+                count(also.deleted, 'linkStyle');
+            } else {
+                const list = next.join(',');
+                d.replace(st.line, st.attach!.listStart, st.attach!.listEnd, list);
+                kept.push({ from: text, to: text.slice(0, st.attach!.listStart - st.start) + list + text.slice(st.attach!.listEnd - st.start) });
+                count(also.updated, 'linkStyle');
+            }
+        }
+        code = d.build();
+        after = parseFlowchart(code)!;
+    }
+    // Lines changed together with the edit (attached lines, renumbered linkStyle) are expected; nothing else.
+    const expected = keptTexts(before, !header);
+    for (const change of kept) {
+        const k = expected.indexOf(change.from);
+        if (k === -1) return fail('invalid', 'The change would touch a line the builder does not manage, so it was not made.');
+        if (change.to === null) expected.splice(k, 1);
+        else expected[k] = change.to;
+    }
+    if (JSON.stringify([...expected].sort()) !== JSON.stringify([...keptTexts(after, !header)].sort())) {
         return fail('unmanaged', 'The change would touch a line the builder does not manage, so it was not made.');
     }
-    if (before.linkStyleMax >= 0) {
-        for (let i = 0; i <= before.linkStyleMax; i++) {
-            const a = before.edges[i];
-            const b = after.edges[i];
-            if (a && (!b || a.from !== b.from || a.to !== b.to)) return fail('in-use', LINK_STYLE_MESSAGE);
-        }
-    }
     const oldStyled = new Set(before.lines.filter((l) => STYLE_RULE.test(l)));
-    if (after.lines.some((l, i) => STYLE_RULE.test(l) && after.lineRoles[i] === 'statements' && !oldStyled.has(l) && after.statements.some((s) => s.line === i && s.kind === 'nodes'))) {
+    if (after.lines.some((l, i) => STYLE_RULE.test(l) && after!.lineRoles[i] === 'statements' && !oldStyled.has(l) && after!.statements.some((s) => s.line === i && s.kind === 'nodes'))) {
         return fail('label', 'Mermaid would read this label as a style. Change the text around the colon or #.');
     }
     const problem = check(after);
     if (problem) return fail('invalid', problem);
-    return { ok: true, code, ...extra };
+    const changed = Object.keys(also.deleted).length + Object.keys(also.updated).length + also.lines.length > 0;
+    return { ok: true, code, ...extra, ...(changed ? { also } : {}) };
+}
+
+/**
+ * Take `id` out of the style, class and click lines that name it: out of the list, or the whole
+ * statement when it named only `id`. classDef lines are never touched.
+ */
+function detach(model: FlowchartModel, id: string, d: Draft, kept: KeptChange[], also: Also): void {
+    for (const st of model.statements) {
+        if (st.kind !== 'other' || !st.attach || st.attach.keyword === 'linkStyle' || !st.attach.items.some((x) => x.value === id)) continue;
+        const text = stmtText(model, st);
+        const left = st.attach.items.filter((x) => x.value !== id).map((x) => x.value);
+        if (left.length === 0) {
+            d.remove(st);
+            kept.push({ from: text, to: null });
+            count(also.deleted, st.attach.keyword);
+        } else {
+            const list = left.join(',');
+            d.replace(st.line, st.attach.listStart, st.attach.listEnd, list);
+            kept.push({ from: text, to: text.slice(0, st.attach.listStart - st.start) + list + text.slice(st.attach.listEnd - st.start) });
+            count(also.updated, st.attach.keyword);
+        }
+    }
+}
+
+/** The lines (whole blocks for text over several lines) the builder does not read that name `id`. */
+function unreadMentions(model: FlowchartModel, id: string): number[][] {
+    const word = new RegExp(String.raw`(?<![\w-])${id.replace(/[-]/g, '\\-')}(?![\w-])`);
+    const blocks: number[][] = [];
+    for (const line of model.unmanaged) {
+        const on = model.statements.filter((st) => st.line === line);
+        // Attached lines are handled on their own; classDef and linkStyle name classes and numbers, not nodes.
+        if (on.some((st) => st.kind === 'other' && (st.attach || st.role === 'accessibility' || st.role === 'direction' || /^(?:classDef|linkStyle)\b/.test(stmtText(model, st))))) continue;
+        if (blocks.some((b) => b.includes(line))) continue;
+        // A block: the line that opens it and the lines without statements after it.
+        let first = line;
+        while (first > model.header && model.lineRoles[first] === 'unmanaged' && !model.statements.some((st) => st.line === first)) first--;
+        if (model.statements.some((st) => st.line === first && st.kind === 'other' && st.role === 'accessibility')) continue;
+        let last = first;
+        while (last + 1 < model.lines.length && model.lineRoles[last + 1] === 'unmanaged' && !model.statements.some((st) => st.line === last + 1)) last++;
+        const range = Array.from({ length: last - first + 1 }, (_, k) => first + k);
+        if (range.some((l) => word.test(stripCr(model.lines[l]).replace(/"[^"]*"/g, '""')))) blocks.push(range);
+    }
+    return blocks;
+}
+
+const lineList = (lines: number[]) => (lines.length === 1 ? `line ${lines[0] + 1}` : `lines ${lines.slice(0, -1).map((l) => l + 1).join(', ')} and ${lines.at(-1)! + 1}`);
+
+/** Ask before deleting lines the builder cannot read; or delete them (whole lines). */
+function unreadLines(model: FlowchartModel, id: string, name: string, confirmed: boolean, d: Draft, kept: KeptChange[], also: Also): EditResult | null {
+    const blocks = unreadMentions(model, id);
+    if (blocks.length === 0) return null;
+    const firsts = blocks.map((b) => b[0]);
+    if (!confirmed) {
+        const which = lineList(firsts);
+        const verb = firsts.length === 1 ? 'names' : 'name';
+        return fail('confirm', `${which[0].toUpperCase()}${which.slice(1)} also ${verb} ${name} in a form the builder does not read. Press Delete again to delete ${name} and ${which} as well.`);
+    }
+    for (const line of blocks.flat()) {
+        const text = stripCr(model.lines[line]);
+        if (text.trim() === '') continue;
+        d.replace(line, 0, text.length, '');
+        if (model.lineRoles[line] === 'unmanaged') kept.push({ from: text.trimStart(), to: null });
+        else for (const st of model.statements) if (st.line === line && st.kind === 'other') kept.push({ from: stmtText(model, st), to: null });
+        also.lines.push(line);
+    }
+    return null;
 }
 
 /** Lines of statements the builder does not manage that name `id` (outside quoted text). */
@@ -1102,14 +1388,6 @@ function namedBy(model: FlowchartModel, id: string): number | null {
     }
     return null;
 }
-/** "Line 3 (style) names Stop." or "Line 2 names B in a form the builder does not edit." */
-function namedMessage(model: FlowchartModel, line: number, name: string): string {
-    const keyword = /^\s*(style|classDef|class|linkStyle|click)\b/.exec(stripCr(model.lines[line]))?.[1];
-    return keyword
-        ? `Line ${line + 1} (${keyword}) names ${name}. Change or delete that line in the Code tab first.`
-        : `Line ${line + 1} names ${name} in a form the builder does not edit. Change or delete that line in the Code tab first.`;
-}
-
 /** A statement split where references were removed (`keep`) or a link cut, as pieces of the original text. */
 interface Piece { text: string; bare: boolean }
 function pieces(model: FlowchartModel, st: NodesStatement, keep: (ref: NodeRef) => boolean, cut: number | null = null): Piece[] {
@@ -1246,6 +1524,7 @@ export function updateNode(code: string, id: string, spec: FlowNodeSpec): EditRe
     const error = checkNodeSpec(model, changes, false);
     if (error) return { ok: false, error };
     const name = nodeName(node);
+    if (changes.label !== undefined && node.markdown) return fail('unmanaged', `The label of ${name} is a markdown string. Edit it in the Code tab.`);
     if (node.defCount > 1 && (changes.shape !== undefined || changes.icon !== undefined)) {
         return fail('unmanaged', `${name} is defined in more than one place. Change its shape or icon in the Code tab.`);
     }
@@ -1266,8 +1545,8 @@ export function updateNode(code: string, id: string, spec: FlowNodeSpec): EditRe
         if (changes.icon) d.replace(st.line, get('icon')!.valueStart, get('icon')!.valueEnd, `"${changes.icon}"`);
         if (changes.label !== undefined) {
             const p = get('label');
-            if (p) d.replace(st.line, p.valueStart, p.valueEnd, yamlString(finalLabel));
-            else adds.push(`label: ${yamlString(finalLabel)}`);
+            if (p) d.replace(st.line, p.valueStart, p.valueEnd, yamlLabel(finalLabel));
+            else adds.push(`label: ${yamlLabel(finalLabel)}`);
             const type = get('labelType');
             if (needsPlainText(finalLabel) && (!type || type.value === 'markdown')) {
                 if (type) d.replace(st.line, type.valueStart, type.valueEnd, '"text"');
@@ -1379,7 +1658,7 @@ export function setNodeParent(code: string, id: string, target: string | null): 
         extra(d);
         return fail('invalid', check(parseFlowchart(d.build())) ?? 'It cannot be moved there.');
     }
-    return finish(model, result, check, { id });
+    return finish(model, result, check, { id }, false, { edges: { reorder: true } });
 }
 
 /** The statements that name `id` (a node, or a subgraph used as an end), each split where its references go. */
@@ -1394,25 +1673,31 @@ function removeRefs(model: FlowchartModel, id: string): { st: Statement; pieces:
 
 /**
  * Remove a node and the connections that touch it. A chain through it is split
- * (`A --> B --> C` without B: `A` and `C`), and what the rest of the chain defines stays.
- * Refused when a line the builder does not manage names the node (style, class, click, …).
+ * (`A --> B --> C` without B: `A` and `C`), and what the rest of the chain defines stays. The lines
+ * attached to it go with it: it leaves style, class and click lists (a line that named only it is
+ * deleted), and linkStyle numbers follow the connections that stay. Lines that name it in a form the
+ * builder does not read are deleted too, but only when `confirmed` (the first try asks).
  */
-export function removeNode(code: string, id: string): EditResult {
+export function removeNode(code: string, id: string, confirmed = false): EditResult {
     const model = parseFlowchart(code);
     if (!model) return NOT_FLOWCHART;
     const node = findNode(model, id);
     if (!node) return fail('not-found', `There is no node ${id}.`);
-    const named = namedBy(model, id);
-    if (named !== null) return fail('in-use', namedMessage(model, named, nodeName(node)));
+    const kept: KeptChange[] = [];
+    const also = emptyAlso();
+    const attached = new Draft(model);
+    const ask = unreadLines(model, id, nodeName(node), confirmed, attached, kept, also);
+    if (ask) return ask;
+    detach(model, id, attached, kept, also);
     const plan = removeRefs(model, id);
     const expected = snapshot(model);
     expected.nodes.delete(id);
-    const gone = model.edges.filter((e) => e.from === id || e.to === id).map(edgeSig);
-    expected.edges = without(expected.edges, gone);
+    const removed = model.edges.filter((e) => e.from === id || e.to === id);
+    expected.edges = without(expected.edges, removed.map(edgeSig));
     const check = (after: FlowchartModel | null) => (after !== null && sameSnapshot(expected, snapshot(after)) ? null : `${nodeName(node)} cannot be deleted here. Delete it in the Code tab.`);
-    const result = buildPlan(model, plan, () => {}, (after) => check(after) === null);
+    const result = buildPlan(model, plan, (d) => d.adopt(attached), (after) => check(after) === null);
     if (result === null) return fail('invalid', check(null)!);
-    return finish(model, result, check);
+    return finish(model, result, check, {}, false, { kept, edges: { removed }, also });
 }
 
 function without(list: string[], remove: string[]): string[] {
@@ -1479,20 +1764,57 @@ export function connectNodes(code: string, from: string, to: string): EditResult
     return addEdge(code, { from, to });
 }
 
-/** Remove an edge; a chain is split at it (`A --> B --> C` without B --> C: `A --> B` and `C`). */
+/**
+ * A statement with & groups written as one statement per connection, in place and in Mermaid's order
+ * (`A & B --> C` becomes `A --> C` and `B --> C`); a node's shape and class stay on its first mention.
+ * Null when the result would not read as the same diagram.
+ */
+function expandShared(model: FlowchartModel, st: NodesStatement): string | null {
+    const line = stripCr(model.lines[st.line]);
+    const seen = new Set<NodeRef>();
+    const refText = (r: NodeRef) => {
+        if (seen.has(r)) return r.id;
+        seen.add(r);
+        return line.slice(r.start, r.end);
+    };
+    const out: string[] = [];
+    st.links.forEach((link, k) => {
+        for (const a of st.groups[k]) for (const b of st.groups[k + 1]) out.push(`${refText(a)}${line.slice(link.start, link.end)}${refText(b)}`);
+    });
+    const d = new Draft(model);
+    d.replaceWith(st, out);
+    const code = d.build();
+    const after = parseFlowchart(code);
+    const order = (m: FlowchartModel) => m.edges.map(edgeSig).join('\n');
+    return after && sameSnapshot(snapshot(model), snapshot(after)) && order(after) === order(model) ? code : null;
+}
+
+/** The text without connection `edge`: its chain is split at it. Null when that cannot be written here. */
+function withoutEdge(model: FlowchartModel, edge: FlowEdge): string | null {
+    const st = model.statements[edge.statement] as NodesStatement;
+    const expected = snapshot(model);
+    expected.edges = without(expected.edges, [edgeSig(edge)]);
+    return buildPlan(model, [{ st, pieces: pieces(model, st, () => true, edge.link) }], () => {}, (after) => after !== null && sameSnapshot(expected, snapshot(after)));
+}
+
+/** Remove an edge; a chain is split at it (`A --> B --> C` without B --> C: `A --> B` and `C`). linkStyle numbers follow. */
 export function removeEdge(code: string, key: string): EditResult {
     const model = parseFlowchart(code);
     if (!model) return NOT_FLOWCHART;
     const edge = findEdge(model, key);
     if (!edge) return fail('not-found', 'That connection is no longer in the diagram.');
-    const st = model.statements[edge.statement] as NodesStatement;
-    if (edge.shared) return fail('unmanaged', `This connection is written together with others (with &) on line ${st.line + 1}. Change it in the Code tab.`);
+    if (edge.shared) {
+        // Written with &: one statement per connection first (same connections, same order), then the edit.
+        const expanded = expandShared(model, model.statements[edge.statement] as NodesStatement);
+        if (expanded === null) return fail('unmanaged', `This connection is written together with others (with &) on line ${model.statements[edge.statement].line + 1}. Change it in the Code tab.`);
+        return removeEdge(expanded, key);
+    }
     const expected = snapshot(model);
     expected.edges = without(expected.edges, [edgeSig(edge)]);
-    const check = (after: FlowchartModel | null) => (after !== null && sameSnapshot(expected, snapshot(after)) ? null : 'This connection cannot be deleted here. Delete it in the Code tab.');
-    const result = buildPlan(model, [{ st, pieces: pieces(model, st, () => true, edge.link) }], () => {}, (after) => check(after) === null);
-    if (result === null) return fail('invalid', check(null)!);
-    return finish(model, result, check);
+    const result = withoutEdge(model, edge);
+    const message = 'This connection cannot be deleted here. Delete it in the Code tab.';
+    if (result === null) return fail('invalid', message);
+    return finish(model, result, (after) => (sameSnapshot(expected, snapshot(after)) ? null : message), {}, false, { edges: { removed: [edge] } });
 }
 
 /**
@@ -1505,6 +1827,15 @@ export function updateEdge(code: string, key: string, spec: Partial<FlowEdgeSpec
     if (!model) return NOT_FLOWCHART;
     const edge = findEdge(model, key);
     if (!edge) return fail('not-found', 'That connection is no longer in the diagram.');
+    if (edge.shared) {
+        // Written with &: one statement per connection first (same connections, same order), then the edit.
+        const same = (spec.label === undefined || (normalizeLabel(spec.label ?? '') || null) === edge.label)
+            && (spec.line === undefined || spec.line === lineStyleOf(edge)) && (spec.from ?? edge.from) === edge.from && (spec.to ?? edge.to) === edge.to;
+        if (same) return { ok: true, code, key };
+        const expanded = expandShared(model, model.statements[edge.statement] as NodesStatement);
+        if (expanded === null) return fail('unmanaged', `This connection is written together with others (with &) on line ${model.statements[edge.statement].line + 1}. Change it in the Code tab.`);
+        return updateEdge(expanded, key, spec);
+    }
     const label = spec.label === undefined ? edge.label : normalizeLabel(spec.label ?? '') || null;
     const styleNow = lineStyleOf(edge);
     const style = spec.line ?? styleNow;
@@ -1514,16 +1845,19 @@ export function updateEdge(code: string, key: string, spec: Partial<FlowEdgeSpec
         if (style === null) return fail('unmanaged', 'This connection has a line the builder does not write. Change it in the Code tab.');
         const error = checkEdge(model, { from, to, label, line: style }, key);
         if (error) return { ok: false, error };
-        const removed = removeEdge(code, key);
-        if (!removed.ok) return removed;
-        const added = addEdge(removed.code, { from, to, label, line: style });
+        // The connection is written again at the end; a linkStyle that styled it follows it.
+        const removed = withoutEdge(model, edge);
+        if (removed === null) return fail('invalid', 'This connection cannot be changed here. Change it in the Code tab.');
+        const added = addEdge(removed, { from, to, label, line: style });
         if (!added.ok) return added;
-        return finish(model, added.code, () => null, { key: added.key });
+        return finish(model, added.code, () => null, { key: added.key }, false, { edges: { moved: { edge, key: added.key! } } });
     }
     const labelChanged = label !== edge.label;
     const styleChanged = style !== styleNow;
     if (!labelChanged && !styleChanged) return { ok: true, code, key };
-    if (edge.shared) return fail('unmanaged', `This connection is written together with others (with &) on line ${model.statements[edge.statement].line + 1}. Change it in the Code tab.`);
+    if (edge.markdown && (labelChanged || (styleChanged && model.statements[edge.statement].kind === 'nodes' && (model.statements[edge.statement] as NodesStatement).links[edge.link].form === 'inline'))) {
+        return fail('unmanaged', 'The label of this connection is a markdown string. Edit it in the Code tab.');
+    }
     if (labelChanged) {
         const problem = labelProblem(label ?? '', true);
         if (problem) return fail('label', problem);
@@ -1570,7 +1904,7 @@ export function addSubgraph(code: string, spec: SubgraphSpec): EditResult {
     if (isError(at)) return { ok: false, error: at };
     const id = flowId(code, title, 'group');
     const d = new Draft(model);
-    d.insert(at.after, `${at.indent}subgraph ${id} ["${title}"]${at.semi}`);
+    d.insert(at.after, `${at.indent}subgraph ${id} ["${encodeLabel(title)}"]${at.semi}`);
     d.insert(at.after, `${at.indent}end${at.semi}`);
     const expected = snapshot(model);
     return finish(model, d.build(), (after) => {
@@ -1595,6 +1929,7 @@ export function updateSubgraph(code: string, key: string, spec: SubgraphSpec): E
     const title = spec.title === undefined ? sg.title : normalizeLabel(spec.title);
     const parent = spec.parent === undefined ? sg.parent : spec.parent || null;
     if (title !== sg.title) {
+        if (sg.markdown) return fail('unmanaged', `The title of ${subgraphName(sg)} is a markdown string. Edit it in the Code tab.`);
         const problem = labelProblem(title);
         if (problem) return fail('label', problem);
     }
@@ -1610,12 +1945,12 @@ export function updateSubgraph(code: string, key: string, spec: SubgraphSpec): E
     const d = new Draft(model);
     let id = key;
     if (title !== sg.title) {
-        if (st.form === 'id-title') d.replace(st.line, line.indexOf('[', st.restStart + st.written!.length), st.end, `["${title}"]`);
-        else if (st.form === 'id') d.replace(st.line, st.end, st.end, ` ["${title}"]`);
+        if (st.form === 'id-title') d.replace(st.line, line.indexOf('[', st.restStart + st.written!.length), st.end, `["${encodeLabel(title)}"]`);
+        else if (st.form === 'id') d.replace(st.line, st.end, st.end, ` ["${encodeLabel(title)}"]`);
         else {
             if (namedBy(model, key) !== null) return fail('in-use', `A line the builder does not manage names ${key}. Change it in the Code tab first.`);
             id = flowId(code, title, 'group');
-            d.replace(st.line, st.start, st.end, `subgraph ${id} ["${title}"]`);
+            d.replace(st.line, st.start, st.end, `subgraph ${id} ["${encodeLabel(title)}"]`);
         }
     }
     if (parent !== sg.parent) {
@@ -1666,21 +2001,30 @@ function finishSubgraph(model: FlowchartModel, code: string, key: string, id: st
  * Remove a subgraph: its `subgraph` and `end` lines go, and what was inside it now belongs to its
  * parent (or the top level). Connections to the subgraph itself are removed.
  */
-export function removeSubgraph(code: string, key: string): EditResult {
+export function removeSubgraph(code: string, key: string, confirmed = false): EditResult {
     const model = parseFlowchart(code);
     if (!model) return NOT_FLOWCHART;
     const sg = findSubgraph(model, key);
     if (!sg) return fail('not-found', 'That subgraph is no longer in the diagram.');
     if (!sg.managed) return fail('unmanaged', 'This subgraph is written in a form the builder does not edit. Change it in the Code tab.');
-    const named = namedBy(model, key);
-    if (named !== null) return fail('in-use', namedMessage(model, named, subgraphName(sg)));
-    // Its `direction` line would then set the direction of the subgraph around it.
-    const direction = model.statements.find((s) => s.parent === sg.statement && s.kind === 'other' && s.role === 'direction');
-    if (direction) return fail('unmanaged', `${subgraphName(sg)} sets its own direction on line ${direction.line + 1}. Delete that line in the Code tab first.`);
+    const kept: KeptChange[] = [];
+    const also = emptyAlso();
+    const attached = new Draft(model);
+    const ask = unreadLines(model, key, subgraphName(sg), confirmed, attached, kept, also);
+    if (ask) return ask;
+    detach(model, key, attached, kept, also);
+    // Its own `direction` line goes with it: left in place it would set the direction of the parent.
+    for (const st of model.statements) {
+        if (st.parent !== sg.statement || st.kind !== 'other' || st.role !== 'direction') continue;
+        attached.remove(st);
+        kept.push({ from: stmtText(model, st), to: null });
+        count(also.deleted, 'direction');
+    }
     const plan = removeRefs(model, key);
     const open = model.statements[sg.statement];
     const close = model.statements[sg.close!];
-    const gone = model.edges.filter((e) => e.from === key || e.to === key).map(edgeSig);
+    const removed = model.edges.filter((e) => e.from === key || e.to === key);
+    const gone = removed.map(edgeSig);
     // What was inside it is now inside its parent: its segment leaves every path.
     const from = pathOf(model, key);
     const to = pathOf(model, sg.parent);
@@ -1697,10 +2041,11 @@ export function removeSubgraph(code: string, key: string): EditResult {
     const unit = inner.startsWith(outer) ? inner.slice(outer.length) : '';
     const dedent = unit !== '' && open.line !== close.line && body.every((t) => t.trim() === '' || t.startsWith(outer + unit));
     const result = buildPlan(model, plan, (d) => {
+        d.adopt(attached);
         d.remove(open);
         d.remove(close);
         if (dedent) body.forEach((t, k) => { if (t.trim() !== '') d.replace(open.line + 1 + k, outer.length, outer.length + unit.length, ''); });
     }, (after) => check(after) === null);
     if (result === null) return fail('invalid', 'This subgraph cannot be deleted here. Delete it in the Code tab.');
-    return finish(model, result, check);
+    return finish(model, result, check, {}, false, { kept, edges: { removed }, also });
 }

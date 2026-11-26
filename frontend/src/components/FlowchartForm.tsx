@@ -4,6 +4,7 @@ import {
     removeEdge, removeNode, removeSubgraph, setNodeParent, subgraphChoices, subgraphName, subgraphsInside, updateEdge, updateNode, updateSubgraph,
     type EditResult, type FlowchartModel, type LineStyle, type ShapeName,
 } from '../utils/flowchartModel';
+import { deletedText } from '../utils/flowchartText';
 import type { BuilderSelection, FormProps } from './builderTypes';
 
 /** What the form edits: a new node, subgraph or connection (with the values to start from), or the selection. */
@@ -22,6 +23,8 @@ const ICON = ':icon';
 const FlowchartForm: React.FC<Props> = ({ code, model, target, onChooseIcon, onAddPack, onDone, onCancel, onLeave }) => {
     const id = useId();
     const [error, setError] = useState<{ code: string; message: string } | null>(null);
+    // Delete asked to be pressed again (lines the builder cannot read name the item).
+    const confirming = error?.code === 'confirm';
     const adding = target.mode === 'add';
     const sel = target.mode === 'edit' ? target.selection : null;
     const node = sel?.kind === 'node' ? findNode(model, sel.id) : undefined;
@@ -45,7 +48,8 @@ const FlowchartForm: React.FC<Props> = ({ code, model, target, onChooseIcon, onA
 
     const parents = kind === 'subgraph' ? subgraphChoices(model, sub?.key ?? null) : subgraphChoices(model, null);
     const parentName = (key: string) => (findSubgraph(model, key) ? subgraphName(findSubgraph(model, key)!) : key);
-    const readOnly = (sub && !sub.managed) || edge?.shared;
+    const readOnly = sub && !sub.managed;
+    const MARKDOWN_HINT = <p className="builder-hint">This label is a markdown string. Edit it in the Code tab.</p>;
 
     const show = (result: { code: string; message: string } | null) => setError(result);
 
@@ -74,12 +78,17 @@ const FlowchartForm: React.FC<Props> = ({ code, model, target, onChooseIcon, onA
     };
 
     const remove = () => {
-        if (edge) show(onDone(removeEdge(code, edge.key), null, 'Connection deleted.'));
-        else if (sub) show(onDone(removeSubgraph(code, sub.key), null, `Deleted ${subgraphName(sub)}.`));
-        else if (node) {
-            const touching = model.edges.filter((x) => x.from === node.id || x.to === node.id).length;
-            const extra = touching === 0 ? '' : touching === 1 ? ' and its connection' : ` and its ${touching} connections`;
-            show(onDone(removeNode(code, node.id), null, `Deleted ${nodeName(node)}${extra}.`));
+        const touching = (id: string) => model.edges.filter((x) => x.from === id || x.to === id).length;
+        const also = (r: EditResult) => (r.ok ? r.also : undefined);
+        if (edge) {
+            const r = removeEdge(code, edge.key);
+            show(onDone(r, null, deletedText('the connection', 0, also(r))));
+        } else if (sub) {
+            const r = removeSubgraph(code, sub.key, confirming);
+            show(onDone(r, null, deletedText(subgraphName(sub), touching(sub.key), also(r))));
+        } else if (node) {
+            const r = removeNode(code, node.id, confirming);
+            show(onDone(r, null, deletedText(nodeName(node), touching(node.id), also(r))));
         }
     };
 
@@ -123,16 +132,16 @@ const FlowchartForm: React.FC<Props> = ({ code, model, target, onChooseIcon, onA
             {kind === 'edge' && (
                 <>
                     {model.nodes.length < 2 && <p className="builder-hint">A connection joins two nodes. Add them first.</p>}
-                    {edge?.shared && <p className="builder-hint">This connection is written with &amp; together with others. Change it in the Code tab.</p>}
+                    {edge?.markdown && MARKDOWN_HINT}
                     {endpoint(fromId, setFromId, 'From')}
                     {endpoint(toId, setToId, 'To')}
                     <label className="builder-field">
                         <span>Label (optional)</span>
-                        <input data-field="edge-label" type="text" value={edgeLabel} onChange={(e) => setEdgeLabel(e.target.value)} autoComplete="off" disabled={!!readOnly} {...invalid('label')} />
+                        <input data-field="edge-label" type="text" value={edgeLabel} onChange={(e) => setEdgeLabel(e.target.value)} autoComplete="off" disabled={!!edge?.markdown} {...invalid('label')} />
                     </label>
                     <label className="builder-field">
                         <span>Line</span>
-                        <select data-field="line" value={line} onChange={(e) => setLine(e.target.value)} disabled={!!readOnly}>
+                        <select data-field="line" value={line} onChange={(e) => setLine(e.target.value)}>
                             {LINE_STYLES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                             {line === OTHER && edge && <option value={OTHER}>As written in the code</option>}
                         </select>
@@ -142,9 +151,10 @@ const FlowchartForm: React.FC<Props> = ({ code, model, target, onChooseIcon, onA
             {kind === 'subgraph' && (
                 <>
                     {readOnly && <p className="builder-hint">This subgraph is written in a form the builder does not edit. Change it in the Code tab.</p>}
+                    {sub?.markdown && MARKDOWN_HINT}
                     <label className="builder-field">
                         <span>Title</span>
-                        <input data-field="title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} autoComplete="off" disabled={!!readOnly} {...invalid('label')} />
+                        <input data-field="title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} autoComplete="off" disabled={!!readOnly || !!sub?.markdown} {...invalid('label')} />
                     </label>
                     <label className="builder-field">
                         <span>In subgraph</span>
@@ -158,9 +168,10 @@ const FlowchartForm: React.FC<Props> = ({ code, model, target, onChooseIcon, onA
             )}
             {kind === 'node' && (
                 <>
+                    {node?.markdown && MARKDOWN_HINT}
                     <label className="builder-field">
                         <span>Label</span>
-                        <input data-field="label" type="text" value={label} onChange={(e) => setLabel(e.target.value)} autoComplete="off" {...invalid('label')} />
+                        <input data-field="label" type="text" value={label} onChange={(e) => setLabel(e.target.value)} autoComplete="off" disabled={!!node?.markdown} {...invalid('label')} />
                     </label>
                     <label className="builder-field">
                         <span>Shape</span>

@@ -13,6 +13,7 @@ import { showAtNaturalSize } from '../utils/previewSize';
 import IconPicker from './IconPicker';
 import PackHelp from './PackHelp';
 import AboutDialog from './AboutDialog';
+import ThemeToggle from './ThemeToggle';
 import MenuButton from './MenuButton';
 import ArchitectureBuilder, { type BuilderSelection } from './ArchitectureBuilder';
 import '../index.css'; // Ensure styles are loaded
@@ -83,6 +84,7 @@ const ENGINE_RETRY_MS = 30 * 1000; // wait before pinging again after a ping tha
 const EXPECTED_SECONDS = { ready: 4, cold: 14 };
 // Exports are far smaller; anything bigger is refused before it is read into memory.
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+const RESTORE_FAILED = 'Restore from export failed';
 
 // There is no real progress signal from the server, so the bar eases towards (never reaches) the
 // end: quick at first, slower the longer it takes. It completes when the file arrives.
@@ -102,6 +104,21 @@ const INITIAL_CODE = `graph TD;
   B-->D;
   C-->D;`;
 
+// An error card: a title that says what failed, then the details.
+type Problem = { title: string; message: string };
+
+const ErrorCard: React.FC<{ problem: Problem; role?: 'alert' }> = ({ problem, role }) => (
+    <div className="error-box" role={role}>
+        <p className="error-title">{problem.title}</p>
+        <p className="error-detail">{problem.message}</p>
+    </div>
+);
+
+const ENGINE_STATUS = {
+    ready: { short: 'Engine ready', full: 'Render engine ready.' },
+    warming: { short: 'Engine waking…', full: 'Waking the render engine so your first export is quick…' },
+} as const;
+
 const TABS = [{ id: 'code', label: 'Code' }, { id: 'build', label: 'Build' }] as const;
 type Tab = typeof TABS[number]['id'];
 
@@ -116,8 +133,8 @@ const DiagramEditor: React.FC = () => {
     const [renders, setRenders] = useState(0);
     // The icon picker in choosing mode (the builder's icon field), and the button that opened it.
     const [choosing, setChoosing] = useState<{ onChoose: (prefix: string, entry: CatalogEntry) => void; opener: HTMLElement } | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [uploadError, setUploadError] = useState<string | null>(null);
+    const [error, setError] = useState<Problem | null>(null);
+    const [uploadError, setUploadError] = useState<Problem | null>(null);
     const [downloadFormat, setDownloadFormat] = useState<'png' | 'svg'>('svg');
     const [exportState, setExportState] = useState<ExportState>({ phase: 'idle' });
     const [exportElapsed, setExportElapsed] = useState(0);
@@ -292,9 +309,9 @@ const DiagramEditor: React.FC = () => {
                 
                 // Set error state
                 if (errMsg.includes('syntax')) {
-                    setError('❌ Mermaid syntax error. Check your diagram code or try a simpler example.');
+                    setError({ title: 'Mermaid syntax error', message: 'Check your diagram code or try a simpler example.' });
                 } else {
-                    setError(`❌ Rendering failed: ${errMsg}`);
+                    setError({ title: 'Rendering failed', message: errMsg });
                 }
                 
                 // Show error UI
@@ -303,10 +320,14 @@ const DiagramEditor: React.FC = () => {
                     // SVG), so render it as text, never as HTML.
                     previewRef.current.innerHTML = '';
                     const box = document.createElement('div');
-                    box.style.cssText = 'color:#cc0000;padding:40px 20px;text-align:center;font-size:14px;white-space:pre-wrap;';
-                    const strong = document.createElement('strong');
-                    strong.textContent = 'Error:';
-                    box.append(strong, document.createElement('br'), document.createTextNode(errMsg));
+                    box.className = 'preview-error';
+                    const title = document.createElement('strong');
+                    title.className = 'error-title';
+                    title.textContent = 'Error';
+                    const text = document.createElement('p');
+                    text.className = 'error-detail';
+                    text.textContent = errMsg;
+                    box.append(title, text);
                     previewRef.current.appendChild(box);
                 }
                 
@@ -518,7 +539,7 @@ const DiagramEditor: React.FC = () => {
         if (!file) return;
 
         if (file.size > MAX_UPLOAD_BYTES) {
-            setUploadError('This file is too large (over 20 MB) to be an export from this tool.');
+            setUploadError({ title: RESTORE_FAILED, message: 'This file is too large (over 20 MB) to be an export from this tool.' });
             event.target.value = '';
             return;
         }
@@ -536,11 +557,14 @@ const DiagramEditor: React.FC = () => {
                 setUploadError(null);
                 setError(null);
             } else {
-                setUploadError(`⚠️ No Mermaid metadata found. This file was not created by this tool. Only SVG and PNG files exported from ${branding.productName} contain embedded source code.`);
+                setUploadError({
+                    title: 'No Mermaid metadata found',
+                    message: `This file was not created by this tool. Only SVG and PNG files exported from ${branding.productName} contain embedded source code.`,
+                });
             }
         } catch (uploadErr) {
             console.error('Upload parse error:', uploadErr);
-            setUploadError('Failed to read the file.');
+            setUploadError({ title: RESTORE_FAILED, message: 'Failed to read the file.' });
         } finally {
             event.target.value = '';
         }
@@ -573,7 +597,14 @@ const DiagramEditor: React.FC = () => {
     return (
         <div className="editor-shell">
             <header className="topbar">
-                <h1 className="topbar-brand">{branding.productName}</h1>
+                <h1 className="topbar-brand">
+                    <svg className="brand-mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
+                        <rect x="1.5" y="2.5" width="9" height="7" rx="2" />
+                        <rect x="13.5" y="14.5" width="9" height="7" rx="2" />
+                        <path d="M6 9.5v4.5a2.5 2.5 0 0 0 2.5 2.5h5" />
+                    </svg>
+                    <span>{branding.productName}</span>
+                </h1>
                 <MenuButton
                     id="examples-button"
                     menuId="examples-menu"
@@ -590,8 +621,10 @@ const DiagramEditor: React.FC = () => {
                 <div className="topbar-spacer" />
                 <div className="topbar-export">
                     {exportState.phase === 'idle' && engine !== 'unknown' && (
-                        <p className={`engine-hint ${engine}`}>
-                            {engine === 'ready' ? 'Render engine ready.' : 'Waking the render engine so your first export is quick…'}
+                        <p className={`engine-hint ${engine}`} title={ENGINE_STATUS[engine].full}>
+                            <span className="status-dot" aria-hidden="true" />
+                            <span aria-hidden="true">{ENGINE_STATUS[engine].short}</span>
+                            <span className="sr-only">{ENGINE_STATUS[engine].full}</span>
                         </p>
                     )}
                     <div className="format-toggle" role="radiogroup" aria-label="Download format">
@@ -607,6 +640,7 @@ const DiagramEditor: React.FC = () => {
                     <button className="download-btn" onClick={handleDownload} disabled={isDownloading} aria-busy={isDownloading}>
                         {isDownloading ? 'Rendering…' : 'Download Secure Image'}
                     </button>
+                    <ThemeToggle />
                     <button type="button" id="about-button" ref={aboutButtonRef} className="example-btn" onClick={() => setAboutOpen(true)}>About</button>
                 </div>
                 {exportState.phase !== 'idle' && (
@@ -634,14 +668,17 @@ const DiagramEditor: React.FC = () => {
                         )}
                         {exportState.phase === 'error' && (
                             <div className="error-box export-error" role="alert">
-                                <span>{exportState.message}</span>
-                                {exportState.retryable && (
-                                    <button className="retry-btn" onClick={handleDownload}>Try again</button>
-                                )}
-                                <button className="retry-btn" onClick={() => setExportState({ phase: 'idle' })}>Dismiss</button>
+                                <p className="error-title">Export failed</p>
+                                <p className="error-detail">{exportState.message}</p>
                                 {exportState.requestId && (
-                                    <span className="export-reference">Reference: {exportState.requestId}</span>
+                                    <p className="export-reference">Reference: {exportState.requestId}</p>
                                 )}
+                                <div className="error-actions">
+                                    {exportState.retryable && (
+                                        <button className="retry-btn" onClick={handleDownload}>Try again</button>
+                                    )}
+                                    <button className="retry-btn" onClick={() => setExportState({ phase: 'idle' })}>Dismiss</button>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -686,6 +723,8 @@ const DiagramEditor: React.FC = () => {
                             onChange={(e) => { caretRef.current = e.target.selectionEnd; editCode(e.target.value, e.timeStamp); }}
                             onSelect={(e) => { caretRef.current = e.currentTarget.selectionEnd; }}
                             placeholder="Enter Mermaid code here..."
+                            aria-label="Mermaid code"
+                            spellCheck={false}
                         />
                     </div>
                     <div id="editor-panel-build" role="tabpanel" aria-labelledby="editor-tab-build" className="editor-panel" hidden={tab !== 'build'}>
@@ -703,39 +742,40 @@ const DiagramEditor: React.FC = () => {
                         />
                     </div>
                     <div className="status-area">
-                        {error && <div className="error-box">{error}</div>}
-                        {uploadError && <div className="error-box" role="alert">{uploadError}</div>}
+                        {error && <ErrorCard problem={error} />}
+                        {uploadError && <ErrorCard problem={uploadError} role="alert" />}
                     </div>
                 </section>
                 <div className="preview-container">
                     <div className="preview-toolbar">
                         <div className="zoom-controls">
-                            <button 
-                                className="zoom-btn" 
+                            <button
+                                className="zoom-btn"
                                 onClick={() => handleZoom('out')}
                                 title="Zoom Out (50%-25%)"
                             >
                                 −
                             </button>
                             <span className="zoom-display">{zoom}%</span>
-                            <button 
-                                className="zoom-btn" 
+                            <button
+                                className="zoom-btn"
                                 onClick={() => handleZoom('in')}
                                 title="Zoom In (100%-300%)"
                             >
                                 +
                             </button>
-                            <button 
-                                className="zoom-btn reset" 
+                            <button
+                                className="zoom-btn reset"
                                 onClick={() => handleZoom('reset')}
                                 title="Reset Zoom to 100%"
                             >
                                 ↺
                             </button>
                         </div>
-                        <div className="preview-info">
-                            {error ? '❌ Error' : '✓ Ready'}
-                        </div>
+                        <p className={error ? 'preview-info error' : 'preview-info'}>
+                            <span className="status-dot" aria-hidden="true" />
+                            {error ? 'Error' : 'Ready'}
+                        </p>
                     </div>
                     <div className="preview-pane" ref={containerRef}>
                         <div

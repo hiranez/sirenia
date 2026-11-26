@@ -4,6 +4,16 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- A new look for the editor: warm paper colours, the code and the preview on cards, a monospace interface font (JetBrains Mono, bundled with the editor; nothing is loaded from another site), and buttons with a hard drop shadow; "Download Secure Image" is the one green button. Code and Build are pill tabs. The diagram sits on a white sheet on a faint grid, exactly as it exports; diagram text keeps the export's font (Arial).
+- Dark theme. The editor follows the system's light or dark setting from the first paint; a button in the top bar switches between them for the open page. The choice is not stored. The diagram stays on a white sheet in both themes.
+- The render engine's state is a pill in the top bar ("Engine ready", "Engine waking…", with the full sentence as its tooltip), and the preview's state a "Ready" or "Error" pill.
+- Errors (diagram, export, restore from an export) are pink cards with a title that says what failed ("Mermaid syntax error", "Rendering failed", "Export failed", "Restore from export failed", "No Mermaid metadata found"), followed by the details.
+- In the Build tab, the outline shows the kind of each item as a small label (group, service, junction), and form fields have their labels above them.
+- The code field no longer underlines words as spelling mistakes.
+- On a phone, buttons and fields are at least 40 px high and the top bar fits the width of the screen.
+
 ## [1.6.2] - 2026-11-24
 
 ### Fixed

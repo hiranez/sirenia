@@ -9,6 +9,7 @@ import { loadRecipes, type RecipeInfo } from '../utils/packHelp';
 import { insertIcon, type CatalogEntry } from '../utils/iconPicker';
 import { canRedo, canUndo, createHistory, record, redo, undo, type History } from '../utils/history';
 import { showAtNaturalSize } from '../utils/previewSize';
+import { decodeLabelEntities } from '../utils/labelEntities';
 import IconPicker from './IconPicker';
 import PackHelp from './PackHelp';
 import AboutDialog from './AboutDialog';
@@ -330,7 +331,8 @@ const DiagramEditor: React.FC = () => {
                 
                 // Show Mermaid's SVG as it is. The labels keep the lines and positions Mermaid gave them,
                 // as in the export: re-wrapping them here moved them onto the icons and joined words.
-                previewRef.current.innerHTML = result.svg;
+                // Only character codes in labels are completed, as the export does (labelEntities).
+                previewRef.current.innerHTML = decodeLabelEntities(result.svg);
                 
                 const svgInDOM = previewRef.current.querySelector('svg');
                 

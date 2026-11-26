@@ -3,6 +3,7 @@ const puppeteer = require('puppeteer');
 const { injectMetadata } = require('../utils/metadata');
 const { iconPacksScript, packsForRender, findUnknownIcons, findMissingPacks, packsUsedBy, attributionNotice } = require('../utils/icons');
 const { COLLECT_EXTERNAL_REFS_SCRIPT } = require('../utils/externalRefs');
+const { LABEL_ENTITIES_SCRIPT } = require('../utils/labelEntities');
 
 // ---- Security / resource constants -----------------------------------------
 const MAX_CODE_LENGTH = 10000;            // 10KB diagram source ceiling
@@ -255,6 +256,9 @@ async function renderToBuffer(page, type, output, code) {
     // (read from local disk at start-up; no network).
     await page.addScriptTag({ content: MERMAID_SRC });
     await page.addScriptTag({ content: iconPacksScript(packsForRender(code)) });
+    // Character codes in labels (#quot;, #35;) are completed before the SVG is shown or returned,
+    // as in the editor's preview (utils/labelEntities.js).
+    await page.addScriptTag({ content: LABEL_ENTITIES_SCRIPT });
 
     // securityLevel:'strict' disables HTML/JS in labels and click bindings; htmlLabels:false
     // keeps text as SVG <text>.
@@ -284,7 +288,9 @@ async function renderToBuffer(page, type, output, code) {
       });
       try {
         // eslint-disable-next-line no-undef
-        const { svg } = await window.mermaid.render('diagram-out', diagramCode);
+        const { svg: drawn } = await window.mermaid.render('diagram-out', diagramCode);
+        // eslint-disable-next-line no-undef
+        const svg = window.__decodeLabelEntities(drawn);
         document.getElementById('c').innerHTML = svg;
         return { ok: true, svg };
       } catch (e) {

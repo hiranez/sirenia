@@ -4,6 +4,21 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- Flowcharts in the Build tab. A flowchart (`flowchart` or `graph`, with any direction) opens in the builder: an outline of its subgraphs and nodes, its connections, and a quiet line that counts the lines left to the Code tab. Quick add adds a node: an icon node (`id@{ icon: "gcp:cloud-run", label: "Cloud Run" }`) when the name matches an installed pack, a rectangle (`id["Label"]`) otherwise, into the selected subgraph. "Add node", "Add subgraph", "Connect" and a "Direction" control (top to bottom, bottom to top, left to right, right to left) are in the toolbar. Forms edit a node's label, shape (Rectangle, Rounded, Stadium, Subroutine, Cylinder, Circle, Double circle, Diamond, Hexagon, the parallelograms and trapezoids, Flag), icon and subgraph; a subgraph's title and place; a connection's ends, label and line (arrow, line, dotted, thick). Deleting a node in the middle of a chain (`A --> B --> C`) splits the chain and keeps what the rest of it defines; deleting a subgraph hands its contents to its parent.
+- Connect by clicking in flowcharts: select a node, press C, click the other one. The new connection is selected and its label field has the focus, ready for "Yes" or "No"; Enter writes it, Esc leaves it empty.
+- Selecting connections and subgraphs in the preview: click a connection's label (or its line) or a subgraph; the line is traced over and the label outlined, as separate marks. Double-click puts the cursor in the label or title.
+- Flowchart starters: "Empty flowchart", "Decision flow" (a diamond with Yes and No answers) and "Process with stages" (subgraphs for Plan, Build and Release).
+- The flowchart reader works on a defined part of Mermaid's syntax: node ids with the classic bracket shapes and quoted or plain labels, `@{ icon, label }` nodes (other keys are kept), `:::class` suffixes (kept through every edit), links of every length with labels in both forms, chains, `subgraph id [Title]`, `subgraph Title` and nested subgraphs, `;` between statements and front matter, directives and comments around them. Everything else is kept byte for byte and never rewritten. An edit that would have to change such a line (deleting a node a `style` or `click` line names, renumbering edges a `linkStyle` line styles) is refused with the line number.
+
+### Changed
+
+- The start screen groups its starters under "Architecture diagram" and "Flowchart", and a flowchart no longer leads to it: the editor's default diagram opens in the builder.
+- Labels typed in the builder are written in quotes, so punctuation stays text, and are shown exactly as typed. What Mermaid 11 cannot show that way in a flowchart is refused with the reason: a double quote, `<` or `>`, `#name;` or `&name;`, a leading backtick, and "direction" followed by TB, BT, LR, RL or TD. Runs of spaces become one space, as Mermaid shows them.
+- In a flowchart, quick add offers installed packs only: Mermaid's built-in icons (cloud, database, …) belong to architecture diagrams.
+- An edge label shown next to a selected outline row is readable (it lacked contrast on the green row).
+
 ## [1.8.0] - 2026-11-26
 
 ### Added

@@ -48,7 +48,7 @@ const BuilderTemplates: React.FC<Props> = ({ templates, packLabels, confirm, onC
                         >
                             <span className="builder-template-title">{t.title}</span>
                             <span className="builder-template-text">{t.description}</span>
-                            <span className="builder-template-note">{t.pack ? `${packLabels[t.pack] ?? t.pack} icons` : 'Built-in icons'}</span>
+                            {t.kind === 'architecture' && <span className="builder-template-note">{t.pack ? `${packLabels[t.pack] ?? t.pack} icons` : 'Built-in icons'}</span>}
                         </button>
                     </li>
                 ))}

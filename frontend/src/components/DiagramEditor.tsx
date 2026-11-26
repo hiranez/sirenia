@@ -14,7 +14,7 @@ import PackHelp from './PackHelp';
 import AboutDialog from './AboutDialog';
 import ThemeToggle from './ThemeToggle';
 import MenuButton from './MenuButton';
-import ArchitectureBuilder, { type BuilderSelection } from './ArchitectureBuilder';
+import DiagramBuilder, { type BuilderSelection } from './DiagramBuilder';
 import '../index.css'; // Ensure styles are loaded
 
 // Example diagrams for quick start. `requiresPack`: shown only when that icon pack is installed.
@@ -755,7 +755,7 @@ const DiagramEditor: React.FC = () => {
                         />
                     </div>
                     <div id="editor-panel-build" role="tabpanel" aria-labelledby="editor-tab-build" className="editor-panel" hidden={tab !== 'build'}>
-                        <ArchitectureBuilder
+                        <DiagramBuilder
                             code={code}
                             onEdit={builderEdit}
                             selection={selection}

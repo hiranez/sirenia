@@ -5,10 +5,12 @@ interface Props {
     onToggle: (open: boolean) => void;
     /** 'Ctrl' or 'Cmd'. */
     mod: string;
+    /** What "/" adds: "service" or "node". */
+    noun: string;
 }
 
 // The "Shortcuts" button and its popover: a short list of the Build tab's keys.
-const BuilderShortcuts: React.FC<Props> = ({ open, onToggle, mod }) => {
+const BuilderShortcuts: React.FC<Props> = ({ open, onToggle, mod, noun }) => {
     const id = useId();
     const buttonRef = useRef<HTMLButtonElement>(null);
     const popRef = useRef<HTMLDivElement>(null);
@@ -36,7 +38,7 @@ const BuilderShortcuts: React.FC<Props> = ({ open, onToggle, mod }) => {
     }, [open, onToggle]);
 
     const keys: [string[], string][] = [
-        [['/'], 'Add a service'],
+        [['/'], `Add a ${noun}`],
         [['C'], 'Connect the selected node to another'],
         [['Delete'], 'Delete the selected item'],
         [['Enter'], 'Edit the label of the outline row'],

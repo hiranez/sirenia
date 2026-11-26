@@ -541,6 +541,7 @@ a:hover,
 /* Form fields. */
 .builder-form input,
 .builder-form select,
+.builder-toolbar-select select,
 .icon-picker select,
 .icon-picker-controls input {
   min-width: 0;
@@ -555,6 +556,7 @@ a:hover,
 }
 
 .builder-form select,
+.builder-toolbar-select select,
 .icon-picker select {
   appearance: none;
   padding-right: 28px;
@@ -753,6 +755,20 @@ a:hover,
 .builder-toolbar-history {
   display: flex;
   gap: 6px;
+}
+
+/* A select in the toolbar (a flowchart's direction): its label in front, the same height as the buttons. */
+.builder-toolbar-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.builder-toolbar-select select {
+  min-height: 30px;
+  font-size: 12px;
 }
 
 .builder kbd,
@@ -1083,10 +1099,23 @@ a:hover,
   font-size: 14px;
 }
 
-.builder-start {
+.builder-start,
+.builder-start-group {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.builder-start-group {
+  width: 100%;
+}
+
+.builder-start-group h4 {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
 }
 
 /* Starter diagrams: cards with a title and one line, text only. */
@@ -1212,7 +1241,8 @@ a:hover,
   box-shadow: 1px 1.5px 0 var(--pop);
 }
 
-.builder-outline-row.selected code {
+.builder-outline-row.selected code,
+.builder-outline-row.selected .builder-outline-note {
   color: var(--ink-2);
 }
 
@@ -1234,12 +1264,14 @@ a:hover,
   text-transform: uppercase;
 }
 
-.builder-outline-kind.kind-group {
+.builder-outline-kind.kind-group,
+.builder-outline-kind.kind-subgraph {
   border-color: var(--violet-line);
   background: var(--violet);
 }
 
-.builder-outline-kind.kind-service {
+.builder-outline-kind.kind-service,
+.builder-outline-kind.kind-node {
   border-color: var(--amber-line);
   background: var(--amber);
 }
@@ -1475,6 +1507,15 @@ a:hover,
   fill: none;
   stroke: #ffffff;
   stroke-width: 2px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mermaid-preview svg .builder-selection-edge {
+  fill: none;
+  stroke: var(--mark-select);
+  stroke-width: 6px;
+  stroke-opacity: 0.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -2074,6 +2115,7 @@ a:hover,
   .menu-popup button,
   .builder-form input,
   .builder-form select,
+  .builder-toolbar-select select,
   .icon-picker select,
   .icon-picker-controls input {
     min-height: 40px;

@@ -201,3 +201,46 @@ test('replacing the text: nothing to lose only when it is blank or a bare header
   for (const code of ['', '  \n', 'architecture-beta', 'architecture-beta\n\n']) assert.equal(replacesNothing(code), true, JSON.stringify(code));
   for (const code of ['graph TD', '%% note', 'architecture-beta\n  service a[A]', 'architecture-beta\n%% keep me']) assert.equal(replacesNothing(code), false, JSON.stringify(code));
 });
+
+// ---- flowcharts ----------------------------------------------------------------------------------
+
+test('flowchart quick add: an icon node for a pack match, a rectangle for plain text, into the selected subgraph', async () => {
+  const { quickAddFlowNode, subgraphFor } = await import('./src/utils/quickAdd.ts');
+  const F = await import('./src/utils/flowchartModel.ts');
+  const base = 'flowchart LR\n  subgraph stage ["Stage"]\n    a["A"]\n  end\n  a --> b\n';
+  const icon = ok(quickAddFlowNode(base, 'Run Service', 'demo:run-service', null));
+  assert.equal(icon.code, `${base}  run_service@{ icon: "demo:run-service", label: "Run Service" }\n`);
+  const plain = ok(quickAddFlowNode(base, 'Check the order', null, null));
+  assert.equal(plain.code, `${base}  check_the_order["Check the order"]\n`);
+  const m = F.parseFlowchart(base);
+  assert.equal(subgraphFor(m, 'stage'), 'stage');
+  assert.equal(subgraphFor(m, 'a'), 'stage');
+  assert.equal(subgraphFor(m, 'b'), null);
+  assert.equal(subgraphFor(m, null), null);
+  const inside = ok(quickAddFlowNode(base, 'Next', null, subgraphFor(m, 'a')));
+  assert.equal(inside.code, 'flowchart LR\n  subgraph stage ["Stage"]\n    a["A"]\n    next["Next"]\n  end\n  a --> b\n');
+  assert.match(refused(quickAddFlowNode(base, 'Say "hi"', null, null), 'label'), /double quotes/);
+});
+
+test('flowchart starters: each parses with every line managed, round-trips, and has what its card says', async () => {
+  const { FLOWCHART_TEMPLATES, EMPTY_FLOWCHART_ID } = await import('./src/utils/builderTemplates.ts');
+  const F = await import('./src/utils/flowchartModel.ts');
+  assert.deepEqual(FLOWCHART_TEMPLATES.map((t) => t.title), ['Empty flowchart', 'Decision flow', 'Process with stages']);
+  assert.equal(FLOWCHART_TEMPLATES[0].id, EMPTY_FLOWCHART_ID);
+  for (const t of FLOWCHART_TEMPLATES) {
+    assert.equal(t.kind, 'flowchart');
+    const m = F.parseFlowchart(t.code);
+    assert.ok(m, t.id);
+    assert.deepEqual(m.unmanaged, [], `${t.id}: every line is managed`);
+    for (const n of m.nodes) {
+      assert.equal(F.labelProblem(n.label ?? n.id), null, `${t.id}/${n.id}`);
+      assert.equal(ok(F.updateNode(t.code, n.id, { label: n.label ?? n.id })).code, t.code, `${t.id}/${n.id} no-op edit`);
+    }
+  }
+  const decision = F.parseFlowchart(FLOWCHART_TEMPLATES[1].code);
+  assert.ok(decision.nodes.some((n) => n.shape === 'diamond'));
+  assert.deepEqual(decision.edges.map((e) => e.label).filter(Boolean).sort(), ['No', 'Yes']);
+  const stages = F.parseFlowchart(FLOWCHART_TEMPLATES[2].code);
+  assert.deepEqual(stages.subgraphs.map((g) => g.title), ['Plan', 'Build', 'Release']);
+  assert.ok(stages.nodes.every((n) => n.parent !== null), 'every step is in a stage');
+});

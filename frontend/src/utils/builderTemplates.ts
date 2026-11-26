@@ -6,6 +6,7 @@
 
 export interface Template {
     id: string;
+    kind: 'architecture' | 'flowchart';
     title: string;
     description: string;
     /** The pack whose icons it uses; null: only Mermaid's built-in icons. */
@@ -14,10 +15,12 @@ export interface Template {
 }
 
 export const EMPTY_TEMPLATE_ID = 'empty';
+export const EMPTY_FLOWCHART_ID = 'flowchart-empty';
 
 export const TEMPLATES: readonly Template[] = [
     {
         id: EMPTY_TEMPLATE_ID,
+        kind: 'architecture',
         title: 'Empty architecture diagram',
         description: 'Start from nothing and add services one by one.',
         pack: null,
@@ -25,6 +28,7 @@ export const TEMPLATES: readonly Template[] = [
     },
     {
         id: 'web',
+        kind: 'architecture',
         title: 'Web application (three tiers)',
         description: 'Users, a web server, an application server, a database and file storage.',
         pack: null,
@@ -43,6 +47,7 @@ export const TEMPLATES: readonly Template[] = [
     },
     {
         id: 'gcp',
+        kind: 'architecture',
         title: 'Google Cloud web service',
         description: 'Cloud Load Balancing in front of Cloud Run, with Cloud SQL, Cloud Storage and Pub/Sub.',
         pack: 'gcp',
@@ -63,6 +68,7 @@ export const TEMPLATES: readonly Template[] = [
     },
     {
         id: 'aws',
+        kind: 'architecture',
         title: 'AWS serverless web application',
         description: 'Amazon CloudFront and Amazon S3 for the site; Amazon API Gateway, AWS Lambda and Amazon DynamoDB for the API.',
         pack: 'aws',
@@ -85,6 +91,7 @@ export const TEMPLATES: readonly Template[] = [
     },
     {
         id: 'azure',
+        kind: 'architecture',
         title: 'Microsoft Azure web application',
         description: 'Azure Front Door in front of Azure App Service, with Azure SQL Database, Azure Storage and Azure Key Vault.',
         pack: 'azure',
@@ -101,6 +108,56 @@ export const TEMPLATES: readonly Template[] = [
   app:R --> L:sql
   app:B --> T:storage
   app:T --> B:vault
+`,
+    },
+];
+
+/** Flowchart starters: shapes and arrows only, no icons. */
+export const FLOWCHART_TEMPLATES: readonly Template[] = [
+    {
+        id: EMPTY_FLOWCHART_ID,
+        kind: 'flowchart',
+        title: 'Empty flowchart',
+        description: 'Start from nothing and add steps one by one.',
+        pack: null,
+        code: 'flowchart TD\n',
+    },
+    {
+        id: 'flowchart-decision',
+        kind: 'flowchart',
+        title: 'Decision flow',
+        description: 'A question with Yes and No answers, and a way back to try again.',
+        pack: null,
+        code: `flowchart TD
+  start(["Start"])
+  check{"Is it ready?"}
+  done(["Done"])
+  fix["Fix it"]
+  start --> check
+  check -->|"Yes"| done
+  check -->|"No"| fix
+  fix --> check
+`,
+    },
+    {
+        id: 'flowchart-stages',
+        kind: 'flowchart',
+        title: 'Process with stages',
+        description: 'Steps grouped into Plan, Build and Release stages.',
+        pack: null,
+        code: `flowchart LR
+  subgraph plan ["Plan"]
+    idea["Idea"] --> spec["Write the plan"]
+  end
+  subgraph build ["Build"]
+    work["Do the work"] --> review{"Review"}
+  end
+  subgraph release ["Release"]
+    ship(["Release"])
+  end
+  spec --> work
+  review -->|"Changes"| work
+  review -->|"Approved"| ship
 `,
     },
 ];

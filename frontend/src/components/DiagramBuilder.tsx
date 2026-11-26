@@ -2,21 +2,18 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CatalogEntry } from '../utils/iconPicker';
 import { diagramKind, parseCatalog } from '../utils/iconPicker';
 import { loadPackFile, type PackEntry } from '../utils/iconPacks';
-import {
-    connectNodes, directionOf, edges, findEdge, findNode, nodeName, nodeOutline, nodes, parseArchitecture, removeEdge, removeNode,
-    startArchitecture,
-    type ArchitectureModel, type EdgeItem, type EditResult, type NodeItem, type NodeKind, type Side,
-} from '../utils/architectureModel';
-import { drawMarks, nodeAt, previewSides } from '../utils/architecturePreview';
-import { BUILTIN_SOURCE, groupFor, quickAddService, replacesNothing, type IconSource } from '../utils/quickAdd';
-import { EMPTY_TEMPLATE_ID, availableTemplates, type Template } from '../utils/builderTemplates';
-import BuilderForm, { type Done, type FormTarget } from './BuilderForm';
+import { parseArchitecture, startArchitecture } from '../utils/architectureModel';
+import { parseFlowchart, startFlowchart } from '../utils/flowchartModel';
+import { BUILTIN_SOURCE, replacesNothing, type IconSource } from '../utils/quickAdd';
+import { EMPTY_FLOWCHART_ID, EMPTY_TEMPLATE_ID, FLOWCHART_TEMPLATES, availableTemplates, type Template } from '../utils/builderTemplates';
+import { architectureAdapter, architectureQuickAdd } from './architectureAdapter';
+import { flowchartAdapter } from './flowchartAdapter';
+import type { Adapter, BuilderSelection, FormDone, FormProps, NextSelection, Outcome, Result, Row } from './builderTypes';
 import QuickAdd, { type QuickChoice } from './QuickAdd';
 import BuilderTemplates from './BuilderTemplates';
 import BuilderShortcuts from './BuilderShortcuts';
 
-/** The item selected in the builder. A connection has no id: its line, and the line's text to find it again. */
-export type BuilderSelection = { kind: 'node'; id: string } | { kind: 'edge'; line: number; text: string };
+export type { BuilderSelection } from './builderTypes';
 
 interface Props {
     code: string;
@@ -41,35 +38,30 @@ interface Props {
     renders: number;
 }
 
-const SIDE_WORDS: Record<Side, string> = { L: 'left', R: 'right', T: 'top', B: 'bottom' };
-const ARROWS = { none: '—', forward: '→', backward: '←', both: '↔' };
 const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? 'Cmd' : 'Ctrl';
 const UNDO_HINT = ` Undo: ${MOD}+Z`;
+// The architecture tools, shown (disabled) before there is a diagram to build.
+const START_TOOLS = ['Add service', 'Add group', 'Add junction', 'Connect'];
 
-type Row = { key: string; selection: BuilderSelection; depth: number; node?: NodeItem; edge?: EdgeItem };
+/** The adapter's form for the selection or the new item. */
+const FormSlot: React.FC<FormProps & { adapter: Adapter; formKey: string }> = ({ adapter, formKey, ...props }) => <>{adapter.renderForm(formKey, props)}</>;
 
-function edgeText(model: ArchitectureModel, edge: EdgeItem): string {
-    const end = (id: string, side: Side) => {
-        const n = findNode(model, id);
-        return `${n ? nodeName(n) : id} (${SIDE_WORDS[side]})`;
-    };
-    return `${end(edge.from.id, edge.from.side)} ${ARROWS[directionOf(edge)]} ${end(edge.to.id, edge.to.side)}`;
-}
-
-const isEndpoint = (model: ArchitectureModel | null, id: string | null) => {
-    const n = model && id !== null ? findNode(model, id) : undefined;
-    return n !== undefined && n.kind !== 'group';
-};
-
-// The visual builder for architecture diagrams. It keeps no copy of the diagram: every render reads
-// the current text, and every action replaces it with the text the model's edit returns.
-const ArchitectureBuilder: React.FC<Props> = ({
+// The visual builder: one shell for architecture diagrams and flowcharts, with an adapter for each
+// (architectureAdapter, flowchartAdapter). It keeps no copy of the diagram: every render reads the
+// current text, and every action replaces it with the text the model's edit returns.
+const DiagramBuilder: React.FC<Props> = ({
     code, onEdit, selection, onSelect, canUndo, canRedo, onUndo, onRedo, onChooseIcon, onAddPack, packs, active, previewRef, renders,
 }) => {
     const id = useId();
-    const model = useMemo(() => parseArchitecture(code), [code]);
     const kind = diagramKind(code);
-    const [adding, setAdding] = useState<{ target: FormTarget; seq: number } | null>(null);
+    const hasPacks = (packs ?? []).length > 0;
+    const archModel = useMemo(() => parseArchitecture(code), [code]);
+    const adapter = useMemo(() => {
+        if (archModel) return architectureAdapter(code, archModel);
+        const flow = parseFlowchart(code);
+        return flow ? flowchartAdapter(code, flow, hasPacks) : null;
+    }, [code, archModel, hasPacks]);
+    const [adding, setAdding] = useState<{ target: unknown; seq: number } | null>(null);
     const [notice, setNotice] = useState('');
     // Connect mode: the node a connection starts from, and the node under the pointer or focus.
     const [connectFrom, setConnectFrom] = useState<string | null>(null);
@@ -100,13 +92,15 @@ const ArchitectureBuilder: React.FC<Props> = ({
         }
     }, [active, packs]);
 
+    // Mermaid's built-in icons belong to architecture diagrams; a flowchart gets pack icons only.
+    const withBuiltins = adapter?.kind !== 'flowchart';
     const sources = useMemo<IconSource[]>(() => [
-        BUILTIN_SOURCE,
+        ...(withBuiltins ? [BUILTIN_SOURCE] : []),
         ...(packs ?? []).flatMap((p) => {
             const entries = catalogs[p.prefix];
             return Array.isArray(entries) ? [{ prefix: p.prefix, label: p.label, entries }] : [];
         }),
-    ], [packs, catalogs]);
+    ], [packs, catalogs, withBuiltins]);
     const loadingPacks = (packs ?? []).filter((p) => catalogs[p.prefix] === undefined).map((p) => p.label);
     const templates = useMemo(() => availableTemplates(Object.fromEntries(
         Object.entries(catalogs).flatMap(([prefix, c]) => (Array.isArray(c) ? [[prefix, new Set(c.map((e) => e.icon))]] : [])),
@@ -121,22 +115,13 @@ const ArchitectureBuilder: React.FC<Props> = ({
         target?.focus();
     });
 
-    const selectedNode = model && selection?.kind === 'node' ? findNode(model, selection.id) : undefined;
-    const selectedEdge = model && selection?.kind === 'edge' ? findEdge(model, selection.line, selection.text) : undefined;
-    const selected = selectedNode ?? selectedEdge;
-    const selectedId = selectedNode?.id ?? null;
+    const selected = adapter?.resolve(selection) ?? null;
+    const selectedKey = selected?.key ?? null;
     // Connect mode ends by itself when its node goes (an undo, an edit in the Code tab).
-    const connecting = connectFrom !== null && isEndpoint(model, connectFrom) ? connectFrom : null;
+    const connecting = connectFrom !== null && adapter?.isEndpoint(connectFrom) ? connectFrom : null;
     const target = connecting ? candidate : null;
-    const sourceNode = connecting && model ? findNode(model, connecting) : undefined;
-
-    const nodeRows: Row[] = model
-        ? nodeOutline(model).map(({ node, depth }) => ({ key: `n:${node.id}`, depth, node, selection: { kind: 'node', id: node.id } }))
-        : [];
-    const edgeRows: Row[] = model
-        ? edges(model).map((edge) => ({ key: `e:${edge.line}`, depth: 0, edge, selection: { kind: 'edge', line: edge.line, text: model.lines[edge.line] } }))
-        : [];
-    const selectedKey = selectedNode ? `n:${selectedNode.id}` : selectedEdge ? `e:${selectedEdge.line}` : null;
+    const nodeRows = adapter?.nodeRows ?? [];
+    const edgeRows = adapter?.edgeRows ?? [];
 
     // Keep the selected row in view, also when it was selected by a click in the preview.
     useEffect(() => {
@@ -147,14 +132,15 @@ const ArchitectureBuilder: React.FC<Props> = ({
     // The marks on the preview, drawn again after every render; only while building.
     useEffect(() => {
         const svg = previewRef.current?.querySelector('svg');
-        if (svg) drawMarks(svg, { selected: active ? selectedId : null, connecting: connecting !== null, target });
-    }, [previewRef, renders, active, selectedId, connecting, target]);
+        if (svg && adapter) adapter.drawMarks(svg, active ? selection : null, connecting, target);
+        else svg?.querySelectorAll('.builder-overlay').forEach((el) => el.remove());
+    }, [previewRef, renders, active, adapter, selection, connecting, target]);
 
     const svgOf = () => previewRef.current?.querySelector('svg') ?? null;
     const say = (message: string) => setNotice(message);
 
     /** Apply a model edit; false (and the reason on the status line) when it was refused. */
-    const apply = (result: EditResult, message: string): result is Extract<EditResult, { ok: true }> => {
+    const apply = (result: Result, message: string): result is Extract<Result, { ok: true }> => {
         if (!result.ok) {
             say(result.error.message);
             return false;
@@ -164,6 +150,12 @@ const ArchitectureBuilder: React.FC<Props> = ({
         return true;
     };
 
+    // `{ kind: 'edge', line }` (an architecture connection) is completed with the line's new text.
+    const toSelection = (next: NextSelection | undefined, newCode: string): BuilderSelection | null => {
+        if (!next) return null;
+        return next.kind === 'edge' ? { kind: 'edge', line: next.line, text: newCode.split('\n')[next.line] } : next;
+    };
+
     const select = (next: BuilderSelection | null) => {
         setAdding(null);
         setPendingDelete(null);
@@ -171,27 +163,22 @@ const ArchitectureBuilder: React.FC<Props> = ({
         onSelect(next);
     };
 
-    /** Focus the field where a row's item is edited: the label, or the first field when it has none. */
-    const editRow = (row: Pick<Row, 'node' | 'edge'>) => {
-        const field = row.edge ? 'From-node' : row.node?.kind === 'junction' ? 'parent' : 'label';
-        refocus(field, '.builder-form [data-field]');
+    /** Focus the field where a row's item is edited. */
+    const editRow = (row: Pick<Row, 'field'>) => refocus(row.field, '.builder-form [data-field]');
+    const rowOf = (s: BuilderSelection) => {
+        const key = adapter?.resolve(s)?.key;
+        return [...nodeRows, ...edgeRows].find((r) => r.key === key);
     };
 
-    const startAdding = (what: NodeKind | 'edge') => {
-        if (!model) return;
-        // A new node goes into the selected group (or the selected node's group).
-        const parent = groupFor(model, selectedId);
-        const ends = nodes(model).filter((n) => n.kind !== 'group');
-        const from = selectedNode && selectedNode.kind !== 'group' ? selectedNode.id : ends[0]?.id ?? '';
-        const to = ends.find((n) => n.id !== from)?.id ?? '';
-        const formTarget: FormTarget = what === 'edge' ? { mode: 'add', kind: 'edge', from, to } : { mode: 'add', kind: what, parent };
-        setAdding((a) => ({ target: formTarget, seq: (a?.seq ?? 0) + 1 }));
+    const startAdding = (what: string) => {
+        if (!adapter) return;
+        setAdding((a) => ({ target: adapter.addTarget(what, selection), seq: (a?.seq ?? 0) + 1 }));
         setConnectFrom(null);
         setNotice('');
         refocus(undefined, '.builder-form [data-field]');
     };
 
-    const done: Done = (result, next, message) => {
+    const done: FormDone = (result, next, message) => {
         if (!result.ok) return result.error;
         const activeEl = document.activeElement;
         const field = activeEl instanceof HTMLElement && activeEl.closest('.builder-form') ? activeEl.dataset.field : undefined;
@@ -199,33 +186,30 @@ const ArchitectureBuilder: React.FC<Props> = ({
         if (result.code !== code) onEdit(result.code);
         setAdding(null);
         setNotice(result.code !== code ? `${message}${UNDO_HINT}` : message);
-        if (next?.kind === 'edge') onSelect({ kind: 'edge', line: next.line, text: result.code.split('\n')[next.line] });
-        else onSelect(next);
+        onSelect(toSelection(next, result.code));
         return null;
     };
 
     const quickAdd = (choice: QuickChoice): string | null => {
-        const parent = model ? groupFor(model, selectedId) : null;
-        const result = quickAddService(code, choice.label, choice.icon, parent);
-        if (!result.ok) return result.error.message;
-        const group = parent && model ? findNode(model, parent) : undefined;
-        apply(result, `Added ${choice.label.trim()}${group ? ` to ${nodeName(group)}` : ''}.`);
+        const outcome = adapter ? adapter.quickAdd(choice, selection) : architectureQuickAdd(code, null, choice, selection);
+        if (!outcome.result.ok) return outcome.result.error.message;
+        apply(outcome.result, outcome.message);
         setAdding(null);
         setConnectFrom(null);
         setPendingDelete(null);
-        onSelect(result.id ? { kind: 'node', id: result.id } : null);
+        onSelect(toSelection(outcome.select, outcome.result.code));
         return null;
     };
 
     const startConnect = () => {
-        if (!model || !selectedNode) return say('Select a service or junction first, then connect it.');
-        if (selectedNode.kind === 'group') return say('A connection starts at a service or junction, not at a group.');
-        if (!nodes(model).some((n) => n.kind !== 'group' && n.id !== selectedNode.id)) return say('Add another service first, then connect the two.');
+        if (!adapter) return;
+        const problem = adapter.connectProblem(selection);
+        if (problem || !selected || selection?.kind !== 'node') return say(problem ?? '');
         setAdding(null);
         setPendingDelete(null);
-        setConnectFrom(selectedNode.id);
+        setConnectFrom(selection.id);
         setCandidate(null);
-        say(`Click the node to connect ${nodeName(selectedNode)} to. Esc cancels.`);
+        say(`Click the node to connect ${selected.name} to. Esc cancels.`);
     };
 
     const cancelConnect = () => {
@@ -235,37 +219,24 @@ const ArchitectureBuilder: React.FC<Props> = ({
     };
 
     const connectTo = (toId: string) => {
-        if (!connecting || !model) return;
-        const from = findNode(model, connecting);
-        const to = findNode(model, toId);
-        if (!from || !to) return;
-        const sides = previewSides(svgOf(), connecting, toId);
-        const result = connectNodes(code, connecting, toId, sides);
-        const message = `Connected ${nodeName(from)} (${SIDE_WORDS[sides.from]}) to ${nodeName(to)} (${SIDE_WORDS[sides.to]}).`;
-        if (!apply(result, message)) return;
+        if (!connecting || !adapter) return;
+        const outcome = adapter.connect(connecting, toId, svgOf());
+        if (!outcome || !apply(outcome.result, outcome.message)) return;
         setConnectFrom(null);
         setCandidate(null);
-        onSelect({ kind: 'node', id: toId });
+        onSelect(toSelection(outcome.select, outcome.result.code));
+        if (outcome.field) refocus(outcome.field, '.builder-outline [tabindex="0"]');
     };
 
     const deleteSelected = () => {
-        if (!model) return;
-        if (selectedEdge) {
-            if (apply(removeEdge(code, selectedEdge.line), `Deleted the connection ${edgeText(model, selectedEdge)}.`)) onSelect(null);
-        } else if (selectedNode) {
-            const name = nodeName(selectedNode);
-            const inside = nodes(model).filter((n) => n.parent === selectedNode.id).length;
-            if (selectedNode.kind === 'group' && inside > 0 && pendingDelete !== selectedNode.id) {
-                const parent = selectedNode.parent ? findNode(model, selectedNode.parent) : undefined;
-                setPendingDelete(selectedNode.id);
-                return say(`${name} holds ${inside === 1 ? '1 item' : `${inside} items`}. Press Delete again to delete the group; ${inside === 1 ? 'it moves' : 'they move'} to ${parent ? nodeName(parent) : 'the top level'}.`);
-            }
-            const touching = edges(model).filter((e) => e.from.id === selectedNode.id || e.to.id === selectedNode.id).length;
-            const extra = touching === 0 ? '' : touching === 1 ? ' and its connection' : ` and its ${touching} connections`;
-            if (apply(removeNode(code, selectedNode.id), `Deleted ${name}${extra}.`)) onSelect(null);
-        } else {
-            return;
+        if (!adapter || !selection) return;
+        const outcome = adapter.remove(selection, pendingDelete);
+        if (!outcome) return;
+        if ('ask' in outcome) {
+            setPendingDelete(outcome.key);
+            return say(outcome.ask);
         }
+        if (apply(outcome.result, outcome.message)) onSelect(null);
         setPendingDelete(null);
         setConnectFrom(null);
         refocus(undefined, '.builder-outline [tabindex="0"]');
@@ -291,7 +262,8 @@ const ArchitectureBuilder: React.FC<Props> = ({
     };
 
     const chooseTemplate = (template: Template) => {
-        const next = template.id === EMPTY_TEMPLATE_ID ? startArchitecture(kind === 'empty' ? code : '') : template.code;
+        const blank = kind === 'empty' ? code : '';
+        const next = template.id === EMPTY_TEMPLATE_ID ? startArchitecture(blank) : template.id === EMPTY_FLOWCHART_ID ? startFlowchart(blank) : template.code;
         onEdit(next);
         setAdding(null);
         setConnectFrom(null);
@@ -303,38 +275,42 @@ const ArchitectureBuilder: React.FC<Props> = ({
         });
     };
 
-    // Clicks in the preview select a node; in connect mode they choose the other end. A double click
-    // puts the cursor in the node's label field. The handlers are attached again on every render, so
+    const applyOutcome = (outcome: Outcome) => apply(outcome.result, outcome.message);
+    // Esc in a form field: back to the outline, the selection stays.
+    const leaveForm = () => refocus(undefined, '.builder-outline [tabindex="0"]');
+
+    // Clicks in the preview select an item; in connect mode they choose the other end. A double click
+    // puts the cursor in the item's label field. The handlers are attached again on every render, so
     // they always see the current state.
     useEffect(() => {
         const el = previewRef.current;
         if (!active || !el) return;
-        const at = (e: MouseEvent) => {
-            const svg = el.querySelector('svg');
-            return svg ? nodeAt(svg, e.target, e.clientX, e.clientY) : null;
-        };
+        const svgAt = () => el.querySelector('svg');
         const onClick = (e: MouseEvent) => {
-            if (!el.querySelector('svg')) return;
-            const hit = at(e);
+            const svg = svgAt();
+            if (!svg) return;
             if (connecting) {
+                const hit = adapter?.endpointAt(svg, e.target, e.clientX, e.clientY) ?? null;
                 if (hit === null) cancelConnect();
                 else connectTo(hit);
                 return;
             }
-            select(hit === null ? null : { kind: 'node', id: hit });
+            select(adapter?.hit(svg, e.target, e.clientX, e.clientY) ?? null);
         };
         const onDoubleClick = (e: MouseEvent) => {
-            const hit = at(e);
-            if (connecting || hit === null || !model) return;
-            const node = findNode(model, hit);
-            if (!node) return;
-            select({ kind: 'node', id: hit });
-            editRow({ node });
+            const svg = svgAt();
+            const hit = svg && adapter ? adapter.hit(svg, e.target, e.clientX, e.clientY) : null;
+            if (connecting || hit === null) return;
+            const row = rowOf(hit);
+            if (!row) return;
+            select(hit);
+            editRow(row);
         };
         const onMove = (e: MouseEvent) => {
-            if (!connecting) return;
-            const hit = at(e);
-            const next = hit !== connecting && isEndpoint(model, hit) ? hit : null;
+            const svg = svgAt();
+            if (!connecting || !svg || !adapter) return;
+            const hit = adapter.endpointAt(svg, e.target, e.clientX, e.clientY);
+            const next = hit !== connecting && adapter.isEndpoint(hit) ? hit : null;
             if (next !== candidate) setCandidate(next);
         };
         const onLeave = () => { if (connecting && candidate) setCandidate(null); };
@@ -405,7 +381,7 @@ const ArchitectureBuilder: React.FC<Props> = ({
         } else if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             if (connecting) {
-                if (row.node) connectTo(row.node.id);
+                if (row.target) connectTo(row.target);
                 return;
             }
             select(row.selection);
@@ -413,18 +389,15 @@ const ArchitectureBuilder: React.FC<Props> = ({
         }
     };
 
-    const formTarget: FormTarget | null = adding ? adding.target : selected ? { mode: 'edit', item: selected } : null;
-    // A new form for every target and every change of its line, so the fields start from the text.
-    const formKey = adding ? `add-${adding.seq}` : selected ? `${selected.kind}-${selected.line}-${model?.lines[selected.line]}` : '';
-    const place = model ? groupFor(model, selectedId) : null;
-    const placeNode = place && model ? findNode(model, place) : undefined;
+    const formTarget = adding ? adding.target : selected && selection ? adapter?.editTarget(selection) : null;
+    // A new form for every target and every change of its text, so the fields start from the text.
+    const formKey = adding ? `add-${adding.seq}` : selected?.formKey ?? '';
+    const placeName = adapter?.placeName(selection) ?? null;
 
     const renderRow = (row: Row, rows: Row[], index: number, role: 'treeitem' | 'option') => {
         const isSelected = row.key === selectedKey;
         const focusable = isSelected || (selectedKey === null || !rows.some((r) => r.key === selectedKey) ? index === 0 : false);
-        const n = row.node;
-        const icon = n && n.kind !== 'junction' ? n.icon : null;
-        const className = ['builder-outline-row', isSelected && 'selected', connecting && n && n.id === target && 'candidate'].filter(Boolean).join(' ');
+        const className = ['builder-outline-row', isSelected && 'selected', connecting && row.target !== null && row.target === target && 'candidate'].filter(Boolean).join(' ');
         return (
             <li
                 key={row.key}
@@ -435,30 +408,23 @@ const ArchitectureBuilder: React.FC<Props> = ({
                 tabIndex={focusable ? 0 : -1}
                 className={className}
                 style={{ paddingLeft: `${10 + row.depth * 18}px` }}
-                onClick={() => (connecting ? n && connectTo(n.id) : select(row.selection))}
+                onClick={() => (connecting ? row.target && connectTo(row.target) : select(row.selection))}
                 onDoubleClick={() => { if (!connecting) editRow(row); }}
-                onFocus={() => { if (connecting) setCandidate(n && n.id !== connecting && n.kind !== 'group' ? n.id : null); }}
+                onFocus={() => { if (connecting) setCandidate(row.target !== connecting && adapter?.isEndpoint(row.target) ? row.target : null); }}
                 onKeyDown={(e) => onRowKeyDown(e, rows, index)}
             >
-                {n ? (
-                    <>
-                        <span className={`builder-outline-kind kind-${n.kind}`}>{n.kind}</span>
-                        <span className="builder-outline-label">{nodeName(n)}</span>
-                        {icon && <code>{icon}</code>}
-                        {n.kind === 'service' && n.iconText !== null && <code>"{n.iconText}"</code>}
-                    </>
-                ) : row.edge && (
-                    <>
-                        <span className="builder-outline-label">{edgeText(model!, row.edge)}</span>
-                        {row.edge.label && <span className="builder-outline-note">{row.edge.label}</span>}
-                    </>
-                )}
+                {row.tag && <span className={`builder-outline-kind kind-${row.tag}`}>{row.tag}</span>}
+                <span className="builder-outline-label">{row.label}</span>
+                {row.codes.map((c) => <code key={c}>{c}</code>)}
+                {row.note && <span className="builder-outline-note">{row.note}</span>}
             </li>
         );
     };
 
-    const starters = templates.filter((t) => t.id !== EMPTY_TEMPLATE_ID);
-    const confirmReplace = !replacesNothing(code);
+    const ownStarters = adapter?.kind === 'flowchart' ? FLOWCHART_TEMPLATES.filter((t) => t.id !== EMPTY_FLOWCHART_ID) : templates.filter((t) => t.id !== EMPTY_TEMPLATE_ID);
+    const confirmReplace = adapter ? !adapter.keepsNothing : !replacesNothing(code);
+    const texts = adapter?.texts;
+    const toolSelect = adapter?.toolSelect;
 
     return (
         <div className="builder" ref={rootRef}>
@@ -467,43 +433,61 @@ const ArchitectureBuilder: React.FC<Props> = ({
                     <button type="button" className="example-btn" onClick={undo} disabled={!canUndo} aria-keyshortcuts={`${MOD === 'Cmd' ? 'Meta' : 'Control'}+Z`}>Undo</button>
                     <button type="button" className="example-btn" onClick={redo} disabled={!canRedo} aria-keyshortcuts={`${MOD === 'Cmd' ? 'Meta' : 'Control'}+Shift+Z`}>Redo</button>
                 </span>
-                <BuilderShortcuts open={shortcutsOpen} onToggle={setShortcutsOpen} mod={MOD} />
+                <BuilderShortcuts open={shortcutsOpen} onToggle={setShortcutsOpen} mod={MOD} noun={texts?.noun ?? 'service'} />
             </div>
 
             <QuickAdd
                 sources={sources}
                 loading={loadingPacks}
-                disabled={!model && kind !== 'empty'}
-                place={placeNode ? nodeName(placeNode) : null}
+                disabled={!adapter && kind !== 'empty'}
+                place={placeName}
                 onAdd={quickAdd}
                 inputRef={quickRef}
+                noun={texts?.noun ?? 'service'}
+                placeholder={texts?.quickPlaceholder ?? 'Add a service: type a product or icon name'}
+                customNote={texts?.customNote ?? 'Built-in'}
+                customIcon={texts ? texts.customIcon : 'server'}
             />
             <div className="builder-toolbar" role="toolbar" aria-label="Builder">
-                <button type="button" className="example-btn" onClick={() => startAdding('service')} disabled={!model}>Add service</button>
-                <button type="button" className="example-btn" onClick={() => startAdding('group')} disabled={!model}>Add group</button>
-                <button type="button" className="example-btn" onClick={() => startAdding('junction')} disabled={!model}>Add junction</button>
-                <button type="button" className="example-btn" onClick={() => startAdding('edge')} disabled={!model}>Connect</button>
+                {adapter
+                    ? adapter.tools.map((t) => <button key={t.what} type="button" className="example-btn" onClick={() => startAdding(t.what)}>{t.label}</button>)
+                    : START_TOOLS.map((label) => <button key={label} type="button" className="example-btn" disabled>{label}</button>)}
+                {toolSelect && (
+                    <label className="builder-toolbar-select">
+                        <span>{toolSelect.label}</span>
+                        <select value={toolSelect.value} onChange={(e) => applyOutcome(toolSelect.set(e.target.value))}>
+                            {toolSelect.options.map((o) => <option key={o.value} value={o.value} disabled={o.value === ''}>{o.label}</option>)}
+                        </select>
+                    </label>
+                )}
             </div>
             <p className="builder-notice" role="status" aria-live="polite">{notice}</p>
 
-            {!model && (
+            {!adapter && (
                 <div className="builder-empty">
                     <h3>Start a diagram</h3>
                     {kind === 'empty'
-                        ? <p>Build an architecture diagram with groups, services and connections. The Mermaid code is written as you go. Type a product name above, or start from one of these:</p>
-                        : <p>The builder works with architecture diagrams (<code>architecture-beta</code>). This diagram is of another kind: edit it in the Code tab, or start an architecture diagram here. That replaces the current diagram; Undo brings it back.</p>}
-                    <BuilderTemplates templates={templates} packLabels={packLabels} confirm={confirmReplace} onChoose={chooseTemplate} />
+                        ? <p>Build an architecture diagram with groups, services and connections, or a flowchart with steps, decisions and arrows. The Mermaid code is written as you go. Type a product name above to start an architecture diagram, or start from one of these:</p>
+                        : <p>The builder works with architecture diagrams (<code>architecture-beta</code>) and flowcharts (<code>flowchart</code>). This diagram is of another kind: edit it in the Code tab, or start a new diagram here. That replaces the current diagram; Undo brings it back.</p>}
+                    <div className="builder-start-group" role="group" aria-labelledby={`${id}-arch`}>
+                        <h4 id={`${id}-arch`}>Architecture diagram</h4>
+                        <BuilderTemplates templates={templates} packLabels={packLabels} confirm={confirmReplace} onChoose={chooseTemplate} />
+                    </div>
+                    <div className="builder-start-group" role="group" aria-labelledby={`${id}-flow`}>
+                        <h4 id={`${id}-flow`}>Flowchart</h4>
+                        <BuilderTemplates templates={[...FLOWCHART_TEMPLATES]} packLabels={packLabels} confirm={confirmReplace} onChoose={chooseTemplate} />
+                    </div>
                 </div>
             )}
 
-            {model && (
+            {adapter && texts && (
                 <>
-                    {selectedNode && (
-                        <div className={sourceNode ? 'builder-selection connecting' : 'builder-selection'}>
-                            {sourceNode ? (
+                    {selected?.isNode && (
+                        <div className={connecting ? 'builder-selection connecting' : 'builder-selection'}>
+                            {connecting ? (
                                 <>
                                     <p>
-                                        <span className="builder-selection-tag">Connecting from</span> <strong>{nodeName(sourceNode)}</strong>
+                                        <span className="builder-selection-tag">Connecting from</span> <strong>{adapter.name(connecting)}</strong>
                                         <span className="builder-selection-help">Click a node in the preview, or choose one in the outline and press Enter.</span>
                                     </p>
                                     <button type="button" className="example-btn" onClick={cancelConnect}>Cancel</button>
@@ -511,9 +495,9 @@ const ArchitectureBuilder: React.FC<Props> = ({
                             ) : (
                                 <>
                                     <p>
-                                        <span className="builder-selection-tag">Selected</span> <strong>{nodeName(selectedNode)}</strong>
+                                        <span className="builder-selection-tag">Selected</span> <strong>{selected.name}</strong>
                                     </p>
-                                    {selectedNode.kind !== 'group' && (
+                                    {selected.connectable && (
                                         <button type="button" className="example-btn" onClick={startConnect} aria-keyshortcuts="C">
                                             Connect to… <kbd aria-hidden="true">C</kbd>
                                         </button>
@@ -525,29 +509,23 @@ const ArchitectureBuilder: React.FC<Props> = ({
                     <div className="builder-outline" ref={listsRef}>
                         <h3 id={`${id}-nodes`}>Diagram</h3>
                         {nodeRows.length === 0
-                            ? <p className="builder-hint">No groups or services yet. Type a product name in the field above, or start from a template below.</p>
+                            ? <p className="builder-hint">{texts.noNodes}</p>
                             : <ul role="tree" aria-labelledby={`${id}-nodes`}>{nodeRows.map((r, i) => renderRow(r, nodeRows, i, 'treeitem'))}</ul>}
                         <h3 id={`${id}-edges`}>Connections</h3>
                         {edgeRows.length === 0
-                            ? <p className="builder-hint">No connections yet. Select a service and press C, then click another one.</p>
+                            ? <p className="builder-hint">{texts.noEdges}</p>
                             : <ul role="listbox" aria-labelledby={`${id}-edges`}>{edgeRows.map((r, i) => renderRow(r, edgeRows, i, 'option'))}</ul>}
                     </div>
-                    {nodeRows.length === 0 && starters.length > 0 && (
+                    {nodeRows.length === 0 && ownStarters.length > 0 && (
                         <div className="builder-start">
                             <h3>Start from a template</h3>
-                            <BuilderTemplates templates={starters} packLabels={packLabels} confirm={confirmReplace} onChoose={chooseTemplate} />
+                            <BuilderTemplates templates={ownStarters} packLabels={packLabels} confirm={confirmReplace} onChoose={chooseTemplate} />
                         </div>
                     )}
                     {formTarget
-                        ? <BuilderForm key={formKey} code={code} model={model} target={formTarget} onChooseIcon={onChooseIcon} onAddPack={onAddPack} onDone={done} onCancel={() => setAdding(null)} />
-                        : nodeRows.length > 0 && <p className="builder-hint">Select an item above or in the preview to edit it. Double-click a node to edit its label.</p>}
-                    {model.unmanaged.length > 0 && (
-                        <p className="builder-unmanaged">
-                            {model.unmanaged.length === 1
-                                ? '1 line is not managed by the builder. It is kept as it is and can be edited in the Code tab.'
-                                : `${model.unmanaged.length} lines are not managed by the builder. They are kept as they are and can be edited in the Code tab.`}
-                        </p>
-                    )}
+                        ? <FormSlot adapter={adapter} formKey={formKey} code={code} target={formTarget} onChooseIcon={onChooseIcon} onAddPack={onAddPack} onDone={done} onCancel={() => setAdding(null)} onLeave={leaveForm} />
+                        : nodeRows.length > 0 && <p className="builder-hint">{texts.selectHint}</p>}
+                    {adapter.unmanaged && <p className="builder-unmanaged">{adapter.unmanaged}</p>}
                 </>
             )}
 
@@ -559,4 +537,4 @@ const ArchitectureBuilder: React.FC<Props> = ({
     );
 };
 
-export default ArchitectureBuilder;
+export default DiagramBuilder;

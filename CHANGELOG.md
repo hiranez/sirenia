@@ -17,6 +17,7 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 - The Build tab's toolbar fits on one row at 1280 px: quick add comes first, the four "Add…" buttons sit below it, and Undo, Redo and Shortcuts moved to the tab row.
 - The selection outline in the preview is a solid green line drawn by a class (it was an inline indigo dash), visible on the white sheet in both themes. A click on a gap inside an icon now selects that node instead of the group around it.
 - A label that starts and ends with quotes is refused: Mermaid would drop the quotes.
+- An empty editor shows "Nothing to draw yet" in the preview instead of a "Rendering failed" error.
 
 ## [1.7.0] - 2026-11-26
 

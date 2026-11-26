@@ -311,6 +311,16 @@ const DiagramEditor: React.FC = () => {
 
                 // Clear any previous content
                 previewRef.current.innerHTML = '';
+
+                // Nothing to draw is not an error: Mermaid would answer "No diagram type detected".
+                if (!code.trim()) {
+                    const hint = document.createElement('p');
+                    hint.className = 'preview-empty';
+                    hint.textContent = 'Nothing to draw yet. Type Mermaid code, or start a diagram in the Build tab.';
+                    previewRef.current.appendChild(hint);
+                    setError(null);
+                    return;
+                }
                 
                 // Create unique ID (no dots - invalid for CSS selectors)
                 const id = `mermaid-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;

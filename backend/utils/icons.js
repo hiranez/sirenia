@@ -165,10 +165,25 @@ function loadPacks(dir, productName, recipesDir = null) {
     return renderPatterns.filter(([, re]) => re.test(text)).map(([prefix]) => prefix);
   }
 
-  /** Prefixes of installed packs the diagram references (e.g. `gcp:cloud-run`), in pack order. */
+  // Mermaid also draws `gcp-cloud-run` (a dash in place of the colon) with the pack's icon. That
+  // form counts as a use when the name is one the pack has, so the export still carries the notice.
+  // Kept as source strings for the same reason as `refSource`.
+  const dashSources = packs.map((p) => [p.prefix, `(?<![A-Za-z0-9_:-])${escapeRegExp(p.prefix)}-([A-Za-z0-9_-]+)`]);
+
+  /**
+   * Prefixes of installed packs whose icons the diagram uses (`gcp:cloud-run`, or `gcp-cloud-run`
+   * when the pack has that icon), in pack order.
+   */
   function packsUsedBy(code) {
+    const text = String(code);
     const used = new Set();
-    for (const m of refs(code)) used.add(m[1]);
+    for (const m of refs(text)) used.add(m[1]);
+    for (const [prefix, source] of dashSources) {
+      if (used.has(prefix)) continue;
+      for (const m of text.matchAll(new RegExp(source, 'g'))) {
+        if (knownIcons.get(prefix).has(m[1])) { used.add(prefix); break; }
+      }
+    }
     return packs.map((p) => p.prefix).filter((prefix) => used.has(prefix));
   }
 

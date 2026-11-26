@@ -91,6 +91,20 @@ check('packsUsedBy lists the referenced packs in pack order', () => {
   assert.deepStrictEqual(packsUsedBy('a(plain:bar)\nb(dots:dot)\nc(demo:box)\nd(demo:circle)'), ['demo', 'dots', 'plain']);
 });
 
+check('an icon written with a dash in place of the colon still counts as a use of its pack', () => {
+  const { packsUsedBy, attributionNotice } = fixtures;
+  // Mermaid draws demo-square with the icon demo:square, so the export must carry the notice.
+  assert.deepStrictEqual(packsUsedBy('service a(demo-square)[Sq]'), ['demo']);
+  assert.deepStrictEqual(packsUsedBy('n@{ icon: "demo-square", label: "Sq" }'), ['demo']);
+  assert.strictEqual(attributionNotice(packsUsedBy('service a(demo-square)[Sq]')), DEMO_NOTICE);
+  assert.deepStrictEqual(packsUsedBy('a(dots-dot)\nb(demo-square)'), ['demo', 'dots']);
+  // Not a use: a name the pack does not have, another word that ends in the prefix, another case.
+  assert.deepStrictEqual(packsUsedBy('demo-prod --> demo-test'), []);
+  assert.deepStrictEqual(packsUsedBy('service a(mydemo-square)[x]'), []);
+  assert.deepStrictEqual(packsUsedBy('service a(DEMO-square)[x]'), []);
+  assert.deepStrictEqual(packsUsedBy('service a(demo-square)[Sq]'), ['demo'], 'repeat call identical');
+});
+
 check('export notice: pack sentence plus the product independence sentence', () => {
   assert.strictEqual(fixtures.attributionNotice(['demo']), DEMO_NOTICE);
   assert.strictEqual(fixtures.attributionNotice(fixtures.packsUsedBy('service a(demo:square)[Sq]')), DEMO_NOTICE);

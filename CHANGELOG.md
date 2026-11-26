@@ -17,6 +17,10 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 - An export loads only the icon packs its diagram refers to into the render page, instead of every installed pack. With the Google Cloud, AWS and Azure packs installed, a small flowchart exports in about 335 ms instead of 500 ms.
 - The README section "Icon packs" starts with a table of the four icon sets (Mermaid's built-in icons and the three packs), with the vendors' links and an example line for each.
 
+### Fixed
+
+- An export that used a pack icon written with a dash in place of the colon (`gcp-cloud-run`, which Mermaid draws like `gcp:cloud-run`) did not carry the vendor's trademark notice. It does now, in SVG and PNG.
+
 ## [1.6.2] - 2026-11-24
 
 ### Fixed

@@ -86,13 +86,13 @@ const EXAMPLES: { name: string; code: string; requiresPack?: string }[] = [
         name: 'Azure Architecture',
         requiresPack: 'azure',
         code: `architecture-beta
-  group sub(azure:subscriptions)[Subscriptions]
-  group vnet(azure:virtual-networks)[Virtual Networks] in sub
-  service fd(azure:front-door-and-cdn-profiles)[Front Door and CDN Profiles] in sub
-  service app(azure:app-services)[App Services] in vnet
-  service sql(azure:sql-database)[SQL Database] in vnet
-  service kv(azure:key-vaults)[Key Vaults] in vnet
-  service st(azure:storage-accounts)[Storage Accounts] in sub
+  group sub(azure:subscriptions)[Azure subscription]
+  group vnet(azure:virtual-networks)[Azure Virtual Network] in sub
+  service fd(azure:front-door-and-cdn-profiles)[Azure Front Door] in sub
+  service app(azure:app-services)[Azure App Service] in vnet
+  service sql(azure:sql-database)[Azure SQL Database] in vnet
+  service kv(azure:key-vaults)[Azure Key Vault] in vnet
+  service st(azure:storage-accounts)[Azure Storage] in sub
   fd:R --> L:app
   app:R --> L:sql
   app:B --> T:kv

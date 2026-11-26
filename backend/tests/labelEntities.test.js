@@ -52,6 +52,9 @@ check('a code split over two rows by Mermaid\'s wrapping is completed in the fir
   assert.strictEqual(decode(rows('x&amp;qu', 'ot; y')), rows('x&quot;', ' y'));
   assert.strictEqual(decode(rows('x&amp;#3', '5;y')), rows('x&#35;', 'y'));
   assert.strictEqual(decode(rows('x&amp;#35', ';y')), rows('x&#35;', 'y'));
+  // Two different labels are never joined: one that ends in "&" next to one that starts with "quot;".
+  const two = '<text><tspan>Q&amp;</tspan></text><g><text><tspan>quot; x</tspan></text></g>';
+  assert.strictEqual(decode(two), two);
   // Not a code: nothing moves.
   for (const [a, b] of [['x&amp;', 'quote'], ['x&amp;', 'lt;'], ['x&amp;#', 'a;'], ['x&amp;#0', ';'], ['x&amp;', '']]) {
     assert.strictEqual(decode(rows(a, b)), rows(a, b), `${a}|${b}`);

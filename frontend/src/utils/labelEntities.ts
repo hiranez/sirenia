@@ -30,7 +30,12 @@ export function decodeLabelEntities(svg: string): string {
         // Mermaid wraps a long word character by character, which can split a code over two text nodes
         // (row one ends "&amp;", row two starts "quot;"): the whole code goes to the first one.
         const tail = /&amp;(?:q(?:u(?:o(?:t)?)?)?|#\d{0,7})?$/.exec(p.s);
-        const next = tail ? parts.slice(i + 1).find((x) => x.text) : undefined;
+        // Only the next row of the same label: nothing but tspan tags may lie between the two.
+        let next: { text: boolean; s: string } | undefined;
+        for (let j = i + 1; tail && j < parts.length; j++) {
+            if (parts[j].text) { next = parts[j]; break; }
+            if (!/^<\/?tspan\b/i.test(parts[j].s)) break;
+        }
         if (tail && next) {
             const code = /^&amp;(quot|#(\d{1,7}));/.exec(tail[0] + next.s);
             const done = code && code[0].length > tail[0].length ? ref(code[1], code[2]) : null;

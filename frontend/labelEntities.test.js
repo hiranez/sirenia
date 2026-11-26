@@ -33,6 +33,10 @@ test('a code Mermaid\'s wrapping split over two rows is completed in the first',
   assert.equal(decode(rows('alert(1)&amp;', 'quot;')), rows('alert(1)&quot;', ''));
   assert.equal(decode(rows('x&amp;#3', '5;y')), rows('x&#35;', 'y'));
   assert.equal(decode(rows('x&amp;', 'lt;')), rows('x&amp;', 'lt;'));
+  // Two different labels are never joined.
+  const two = '<text><tspan>Q&amp;</tspan></text><g><text><tspan>quot; x</tspan></text></g>';
+  assert.equal(decode(two), two);
+  assert.equal(backend.decodeLabelEntities(two), two);
   for (const [a, b] of [['a&amp;q', 'uot;'], ['&amp;#6', '0;script&amp;#62;']]) assert.equal(decode(rows(a, b)), backend.decodeLabelEntities(rows(a, b)));
 });
 

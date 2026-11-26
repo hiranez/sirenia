@@ -119,7 +119,12 @@ export function flowchartAdapter(code: string, model: FlowchartModel, hasPacks: 
         remove: (s, confirmed) => {
             // Lines the builder cannot read that name the item: a second Delete deletes them too.
             const linesKey = (id: string) => `lines:${id}`;
-            const ask = (result: ReturnType<typeof removeNode>, id: string) => (!result.ok && result.error.code === 'confirm' ? { key: linesKey(id), ask: result.error.message } : null);
+            // Asked only when the second Delete will work; if it would not, the reason is given now.
+            const ask = (result: ReturnType<typeof removeNode>, id: string, confirmedRun: () => ReturnType<typeof removeNode>) => {
+                if (result.ok || result.error.code !== 'confirm') return null;
+                const second = confirmedRun();
+                return second.ok ? { key: linesKey(id), ask: result.error.message } : { result: second, message: '' };
+            };
             const edge = edgeOf(s);
             if (edge) {
                 const result = removeEdge(code, edge.key);
@@ -134,13 +139,13 @@ export function flowchartAdapter(code: string, model: FlowchartModel, hasPacks: 
                 }
                 const result = removeSubgraph(code, sub.key, confirmed === linesKey(sub.key));
                 const touching = model.edges.filter((e) => e.from === sub.key || e.to === sub.key).length;
-                return ask(result, sub.key) ?? { result, message: deletedText(subgraphName(sub), touching, result.ok ? result.also : undefined) };
+                return ask(result, sub.key, () => removeSubgraph(code, sub.key, true)) ?? { result, message: deletedText(subgraphName(sub), touching, result.ok ? result.also : undefined) };
             }
             const node = nodeOf(s);
             if (!node) return null;
             const result = removeNode(code, node.id, confirmed === linesKey(node.id));
             const touching = model.edges.filter((e) => e.from === node.id || e.to === node.id).length;
-            return ask(result, node.id) ?? { result, message: deletedText(nodeName(node), touching, result.ok ? result.also : undefined) };
+            return ask(result, node.id, () => removeNode(code, node.id, true)) ?? { result, message: deletedText(nodeName(node), touching, result.ok ? result.also : undefined) };
         },
         hit: (svg, target, x, y) => flowHit(svg, model, target, x, y),
         endpointAt: (svg, target, x, y) => {

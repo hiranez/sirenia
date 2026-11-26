@@ -8,7 +8,6 @@ import { composeFooterNotice, fetchPack, loadPackIndex, type PackEntry } from '.
 import { loadRecipes, type RecipeInfo } from '../utils/packHelp';
 import { insertIcon, type CatalogEntry } from '../utils/iconPicker';
 import { canRedo, canUndo, createHistory, record, redo, undo, type History } from '../utils/history';
-import { nodeAt, showSelection } from '../utils/architecturePreview';
 import { showAtNaturalSize } from '../utils/previewSize';
 import IconPicker from './IconPicker';
 import PackHelp from './PackHelp';
@@ -161,7 +160,7 @@ const DiagramEditor: React.FC = () => {
     const [tab, setTab] = useState<Tab>('code');
     const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ code: null, build: null });
     const [selection, setSelection] = useState<BuilderSelection | null>(null);
-    // Counts finished preview renders, so the selection outline is drawn again on each new SVG.
+    // Counts finished preview renders, so the builder's marks are drawn again on each new SVG.
     const [renders, setRenders] = useState(0);
     // The icon picker in choosing mode (the builder's icon field), and the button that opened it.
     const [choosing, setChoosing] = useState<{ onChoose: (prefix: string, entry: CatalogEntry) => void; opener: HTMLElement } | null>(null);
@@ -312,6 +311,16 @@ const DiagramEditor: React.FC = () => {
 
                 // Clear any previous content
                 previewRef.current.innerHTML = '';
+
+                // Nothing to draw is not an error: Mermaid would answer "No diagram type detected".
+                if (!code.trim()) {
+                    const hint = document.createElement('p');
+                    hint.className = 'preview-empty';
+                    hint.textContent = 'Nothing to draw yet. Type Mermaid code, or start a diagram in the Build tab.';
+                    previewRef.current.appendChild(hint);
+                    setError(null);
+                    return;
+                }
                 
                 // Create unique ID (no dots - invalid for CSS selectors)
                 const id = `mermaid-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
@@ -430,20 +439,6 @@ const DiagramEditor: React.FC = () => {
         setHistory(next);
         caretRef.current = null;
         setCode(next.present);
-    };
-
-    // The selection outline in the preview, drawn again after every render; only while building.
-    useEffect(() => {
-        const svg = previewRef.current?.querySelector('svg');
-        if (svg) showSelection(svg, tab === 'build' && selection?.kind === 'node' ? selection.id : null);
-    }, [renders, selection, tab]);
-
-    // In the Build tab a click on a service, group or junction of the preview selects it.
-    const onPreviewClick = (e: React.MouseEvent<HTMLDivElement>) => {
-        const svg = previewRef.current?.querySelector('svg');
-        if (tab !== 'build' || !svg) return;
-        const id = nodeAt(svg, e.target, e.clientX, e.clientY);
-        setSelection(id === null ? null : { kind: 'node', id });
     };
 
     const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -771,6 +766,10 @@ const DiagramEditor: React.FC = () => {
                             onRedo={() => stepHistory(redo)}
                             onChooseIcon={installedPacks.length > 0 ? (onChoose, opener) => setChoosing({ onChoose, opener }) : undefined}
                             onAddPack={installedPacks.length === 0 && canAddPack ? openHelp : undefined}
+                            packs={packs}
+                            active={tab === 'build'}
+                            previewRef={previewRef}
+                            renders={renders}
                         />
                     </div>
                     <div className="status-area">
@@ -814,7 +813,6 @@ const DiagramEditor: React.FC = () => {
                             ref={previewRef}
                             className={tab === 'build' ? 'mermaid-preview selectable' : 'mermaid-preview'}
                             style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }}
-                            onClick={onPreviewClick}
                         />
                     </div>
                 </div>

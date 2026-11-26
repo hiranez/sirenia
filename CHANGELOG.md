@@ -4,6 +4,21 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- Quick add in the Build tab: type a product or icon name and press Enter. The field searches Mermaid's built-in icons and every installed pack, lists the best matches as text (official name, pack, technical name), and adds the chosen one as a service with its official name as the label, in the selected group (or the group of the selected node). The new service is selected and the field is ready for the next, so several services can be added in a row. A name that matches nothing becomes a service with the built-in `server` icon.
+- Connect by clicking: select a service or junction, press C or "Connect to…", then click the other node in the preview (or choose it in the outline and press Enter). The connection gets an arrow at the second node, and its sides follow where the two nodes are drawn (to the right: right to left; below: bottom to top; and so on). Connecting a node to itself, or two nodes that are already connected, is refused with a short message. While connecting, the preview marks the first node with a dashed outline and an arrow badge, and shows the line to the node under the pointer.
+- Starters: when the editor is empty or holds another kind of diagram, the Build tab offers cards: "Empty architecture diagram", "Web application (three tiers)" with built-in icons, and one small architecture per installed pack ("Google Cloud web service", "AWS serverless web application", "Microsoft Azure web application"). Choosing one replaces the text as one undo step, after a confirmation when there is something to lose.
+- Keyboard shortcuts in the Build tab, listed under "Shortcuts": `/` quick add, `C` connect, `Delete` delete the selected item (a group with nodes in it asks for a second Delete), `Esc` leave connect mode or clear the selection, Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z redo, `?` the list itself. They do not fire while you type in a field.
+- Double-click a node in the preview, or press Enter on its outline row, to edit its label. The status line says what each action did and how to undo it.
+
+### Changed
+
+- The Build tab's toolbar fits on one row at 1280 px: quick add comes first, the four "Add…" buttons sit below it, and Undo, Redo and Shortcuts moved to the tab row.
+- The selection outline in the preview is a solid green line drawn by a class (it was an inline indigo dash), visible on the white sheet in both themes. A click on a gap inside an icon now selects that node instead of the group around it.
+- A label that starts and ends with quotes is refused: Mermaid would drop the quotes.
+- An empty editor shows "Nothing to draw yet" in the preview instead of a "Rendering failed" error.
+
 ## [1.7.0] - 2026-11-26
 
 ### Added

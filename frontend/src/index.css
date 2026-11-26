@@ -54,6 +54,10 @@
   --shadow-sheet: 0 1px 2px rgba(70, 50, 20, 0.08), 0 12px 28px -14px rgba(70, 50, 20, 0.3);
   --backdrop: rgba(243, 236, 226, 0.78);
 
+  /* Marks on the diagram sheet, which is white in both themes. */
+  --mark-select: #2a6e34;
+  --mark-connect: #1c1a17;
+
   --radius-card: 12px;
   --radius-control: 8px;
   --radius-pill: 999px;
@@ -729,15 +733,315 @@ a:hover,
   gap: 6px;
 }
 
+.builder-toolbar .example-btn,
+.builder-tools .example-btn {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+/* Undo, Redo and Shortcuts sit on the tab row, at its right end, like "Insert icon…" in the Code tab. */
+.builder-tools {
+  position: absolute;
+  top: 13px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .builder-toolbar-history {
   display: flex;
   gap: 6px;
-  margin-left: auto;
 }
 
-.builder-toolbar .example-btn {
+.builder kbd,
+.builder-shortcuts-pop kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--sheet);
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.builder-shortcuts {
+  position: relative;
+}
+
+.builder-shortcuts-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: min(380px, calc(100vw - 32px));
+  padding: 14px 16px;
+  border: 1px solid var(--btn-line);
+  border-radius: var(--radius-card);
+  background: var(--sheet);
+  box-shadow: 3px 4px 0 var(--pop), var(--shadow-card);
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.builder-shortcuts-pop[hidden] {
+  display: none;
+}
+
+.builder-shortcuts-pop h3 {
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.builder-shortcuts-pop dl {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.builder-shortcuts-pop dl > div {
+  display: grid;
+  grid-template-columns: 116px 1fr;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.builder-shortcuts-pop dt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  color: var(--muted);
+}
+
+.builder-shortcuts-pop dd {
+  margin: 0;
+  color: var(--ink);
+}
+
+.builder-shortcuts-pop p {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+
+/* Quick add: the first thing in the Build tab, a field with a list of matches under it. */
+.quick-add {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quick-add-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.quick-add-field input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 40px 0 38px;
+  border: 1px solid var(--btn-line);
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+  box-shadow: 1.5px 2.5px 0 var(--pop);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.quick-add-field input::placeholder {
+  color: var(--muted);
+}
+
+.quick-add-field input:disabled {
+  border-color: var(--line-strong);
+  background: var(--sheet-2);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.quick-add-field input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.quick-add-plus {
+  position: absolute;
+  left: 10px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--pop);
+  border-radius: 50%;
+  background: var(--green);
+  color: var(--on-green);
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.quick-add-field input:disabled ~ .quick-add-plus,
+.quick-add-field:has(input:disabled) .quick-add-plus {
+  border-color: var(--line-strong);
+  background: var(--sheet-2);
+  color: var(--muted);
+}
+
+.quick-add-key {
+  position: absolute;
+  right: 10px;
+  pointer-events: none;
+}
+
+.quick-add-field input:focus ~ .quick-add-key {
+  visibility: hidden;
+}
+
+.quick-add-popup {
+  position: absolute;
+  top: calc(100% + 0px);
+  left: 0;
+  right: 0;
+  z-index: 15;
+  margin-top: 6px;
+  padding: 6px;
+  border: 1px solid var(--btn-line);
+  border-radius: var(--radius-card);
+  background: var(--sheet);
+  box-shadow: 3px 4px 0 var(--pop), var(--shadow-card);
+}
+
+.quick-add-popup ul {
+  max-height: 340px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.quick-add-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1px 10px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.quick-add-option.active {
+  border-color: var(--btn-line);
+  background: var(--green-soft);
+}
+
+.quick-add-name {
+  min-width: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.quick-add-pack {
+  justify-self: end;
+  padding: 0 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--sheet-2);
+  color: var(--ink-2);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.quick-add-option code {
+  min-width: 0;
+  font-size: 11px;
+}
+
+.quick-add-option.active code,
+.quick-add-option.active .quick-add-group {
+  color: var(--ink-2);
+}
+
+.quick-add-group {
+  justify-self: end;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: right;
+}
+
+.quick-add-foot {
+  margin-top: 4px;
+  padding: 6px 10px 2px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.quick-add-foot strong {
+  color: var(--ink);
+}
+
+/* The selected node and the way to connect it; in connect mode, what to do next. */
+.builder-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 7px 8px 7px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-card);
+  background: var(--sheet-2);
+  color: var(--ink);
+}
+
+.builder-selection p {
+  flex: 1 1 240px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.builder-selection-tag {
+  margin-right: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.builder-selection-help {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.builder-selection.connecting {
+  border: 1.5px dashed var(--btn-line);
+  background: var(--amber);
+}
+
+.builder-selection.connecting .builder-selection-tag {
+  color: var(--ink-2);
+}
+
+.builder-selection .example-btn {
   min-height: 30px;
-  padding: 0 10px;
+  padding: 0 8px 0 10px;
   font-size: 12px;
 }
 
@@ -772,6 +1076,85 @@ a:hover,
 
 .builder-empty code {
   color: var(--ink-2);
+}
+
+.builder-empty h3,
+.builder-start h3 {
+  font-size: 14px;
+}
+
+.builder-start {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Starter diagrams: cards with a title and one line, text only. */
+.builder-templates {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.builder-template-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.builder-template {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  padding: 11px 13px 10px;
+  border: 1px solid var(--btn-line);
+  border-radius: var(--radius-card);
+  background: var(--sheet);
+  box-shadow: 1.5px 2.5px 0 var(--pop);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--dur) ease, box-shadow var(--dur) ease, background-color var(--dur) ease;
+}
+
+.builder-template:hover {
+  background: var(--row-hover);
+  transform: translate(-0.5px, -0.5px);
+  box-shadow: 2px 3px 0 var(--pop);
+}
+
+.builder-template:active {
+  transform: translate(1.5px, 2.5px);
+  box-shadow: 0 0 0 var(--pop);
+}
+
+.builder-template-title {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.builder-template-text {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.builder-template-note {
+  margin-top: auto;
+  padding-top: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .builder-outline {
@@ -831,6 +1214,11 @@ a:hover,
 
 .builder-outline-row.selected code {
   color: var(--ink-2);
+}
+
+/* Connect mode: the row under the focus is the other end; dashed, so it reads without colour. */
+.builder-outline-row.candidate {
+  border: 1.5px dashed var(--btn-line);
 }
 
 .builder-outline-kind {
@@ -1053,6 +1441,62 @@ a:hover,
 /* Nodes are picked by clicking in the preview while building; the outline is drawn around them. */
 .mermaid-preview.selectable {
   cursor: pointer;
+}
+
+.workspace:has(.builder-selection.connecting) .mermaid-preview.selectable {
+  cursor: crosshair;
+}
+
+/* The builder's marks: separate elements on top of the diagram, never part of a node. The sheet is
+   white in both themes, so their colours are fixed. Selected: solid green. Connect mode: the source
+   dashed in ink with an arrow badge, the other end dotted green, joined by a dashed line. */
+.mermaid-preview svg .builder-overlay {
+  pointer-events: none;
+}
+
+.mermaid-preview svg .builder-selection-outline {
+  fill: none;
+  stroke: var(--mark-select);
+  stroke-width: 3px;
+}
+
+.mermaid-preview svg .builder-selection-outline.connect-source {
+  stroke: var(--mark-connect);
+  stroke-dasharray: 10 5;
+}
+
+.mermaid-preview svg .builder-connect-marker circle {
+  fill: var(--mark-connect);
+  stroke: #ffffff;
+  stroke-width: 2px;
+}
+
+.mermaid-preview svg .builder-connect-marker path {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 2px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mermaid-preview svg .builder-connect-target {
+  fill: none;
+  stroke: var(--mark-select);
+  stroke-width: 3px;
+  stroke-dasharray: 2 5;
+  stroke-linecap: round;
+}
+
+.mermaid-preview svg .builder-connect-hint {
+  fill: none;
+  stroke: var(--mark-select);
+  stroke-width: 2px;
+  stroke-dasharray: 7 5;
+}
+
+.mermaid-preview svg .builder-connect-head {
+  fill: var(--mark-select);
+  stroke: none;
 }
 
 /* No diagram, only the error: the card replaces the sheet. */
@@ -1614,6 +2058,9 @@ a:hover,
   .retry-btn,
   .editor-tab,
   .builder-toolbar .example-btn,
+  .builder-tools .example-btn,
+  .builder-selection .example-btn,
+  .quick-add-field input,
   .menu-popup button,
   .builder-form input,
   .builder-form select,
@@ -1638,7 +2085,8 @@ a:hover,
   }
 
   .builder-outline-row,
-  .icon-picker-row {
+  .icon-picker-row,
+  .quick-add-option {
     min-height: 40px;
   }
 
@@ -1709,6 +2157,19 @@ a:hover,
 
   .icon-picker-body {
     padding: 16px;
+  }
+
+  .builder-tools {
+    position: static;
+    justify-content: flex-end;
+  }
+
+  .quick-add-key {
+    display: none;
+  }
+
+  .quick-add-field input {
+    padding-right: 10px;
   }
 }
 

@@ -325,6 +325,8 @@ export function labelProblem(label: string, optional = false): string | null {
     if (LINE_BREAK.test(text)) return 'A label has to fit on one line.';
     if (text.includes('[') || text.includes(']')) return 'A label cannot contain [ or ].';
     if (text.includes('%%')) return 'A label cannot contain %%.';
+    // Mermaid drops one pair of quotes around a title, so `"Web"` would show as Web.
+    if (titleValue(`[${text}]`) !== text) return 'A label cannot start and end with quotes.';
     return null;
 }
 
@@ -621,6 +623,38 @@ export function updateEdge(code: string, line: number, spec: Partial<EdgeSpec>):
     const lines = [...model.lines];
     setLine(lines, line, parts.indent + edgeStatement(next) + parts.tail);
     return finish(model, lines, { line });
+}
+
+/** A box in the preview's coordinates. */
+export interface Box { x: number; y: number; width: number; height: number }
+
+/**
+ * The sides for a line from box `from` to box `to` that takes the short way: along the axis on which
+ * their centres are further apart (target to the right: R to L; below: B to T; left: L to R; above: T to B).
+ */
+export function sidesBetween(from: Box, to: Box): { from: Side; to: Side } {
+    const dx = (to.x + to.width / 2) - (from.x + from.width / 2);
+    const dy = (to.y + to.height / 2) - (from.y + from.height / 2);
+    if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? { from: 'R', to: 'L' } : { from: 'L', to: 'R' };
+    return dy >= 0 ? { from: 'B', to: 'T' } : { from: 'T', to: 'B' };
+}
+
+/**
+ * Connect node `fromId` to node `toId` with an arrow at `toId`, on the given sides. Refuses a node
+ * joined to itself and a pair that is already connected, either way round (the Connect form can
+ * still add the other direction).
+ */
+export function connectNodes(code: string, fromId: string, toId: string, sides: { from: Side; to: Side }): EditResult {
+    const model = parseArchitecture(code);
+    if (!model) return NOT_ARCHITECTURE;
+    const from = findNode(model, fromId);
+    const to = findNode(model, toId);
+    if (!from || !to) return fail('not-found', 'That node is no longer in the diagram.');
+    if (fromId === toId) return fail('endpoint', `${nodeName(from)} cannot be connected to itself. Choose another node.`);
+    if (from.kind === 'group' || to.kind === 'group') return fail('endpoint', 'A connection joins services or junctions, not groups.');
+    const existing = edges(model).some((e) => (e.from.id === fromId && e.to.id === toId) || (e.from.id === toId && e.to.id === fromId));
+    if (existing) return fail('endpoint', `${nodeName(from)} and ${nodeName(to)} are already connected. Use Connect to add another connection.`);
+    return addEdge(code, { from: { id: fromId, side: sides.from }, to: { id: toId, side: sides.to, arrow: true } });
 }
 
 export function removeEdge(code: string, line: number): EditResult {

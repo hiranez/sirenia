@@ -499,6 +499,20 @@ test('parse: icon nodes and @{ } blocks', () => {
   assert.deepEqual(s.nodes.map((n) => [n.id, n.shape, n.label]), [['A', 'other', null], ['B', 'other', 'Decision']]);
 });
 
+test('parse: a link label that goes on to the next line is left alone up to its closing arrow', () => {
+  // Mermaid reads "first / second" as the label of A --> B; "second" is not a node.
+  const code = lines('flowchart TD', '  A -- first', '  second --> B', '  B --> C', '  C == a', '  b', '  c ==> D', '  D --> E');
+  const m = F.parseFlowchart(code);
+  assert.deepEqual(m.nodes.map((n) => n.id), ['B', 'C', 'D', 'E']);
+  assert.deepEqual(m.edges.map((e) => [e.from, e.to]), [['B', 'C'], ['D', 'E']]);
+  assert.deepEqual(m.unmanaged, [1, 2, 4, 5, 6]);
+  // A label closed on its own line is read as before.
+  assert.equal(F.parseFlowchart(lines('flowchart TD', '  A -- first --> B', '  second --> B')).edges.length, 2);
+  // Edits keep those lines byte for byte.
+  const added = ok(F.addNode(code, { label: 'New' }));
+  assert.deepEqual(added.code.split('\n').slice(0, 8), code.split('\n'));
+});
+
 test('parse: what is not managed is counted and kept', () => {
   const counts = {
     styling: 2, classes: 3, interaction: 4, linkStyle: 1, edgeIds: 2, markdown: 4, accessibility: 4, unknownLines: 3,
@@ -611,6 +625,24 @@ test('edges: delete splits a chain; labels keep their form; & groups are read-on
   refused(F.connectNodes(CORPUS.editorDefault, 'A', 'B'), 'duplicate');
   refused(F.connectNodes(CORPUS.editorDefault, 'A', 'A'), 'endpoint');
   assert.equal(ok(F.connectNodes(CORPUS.editorDefault, 'D', 'A')).code, `${CORPUS.editorDefault}\n  D --> A;`);
+});
+
+test('edges: a pipe label is followed by one space at most (Mermaid refuses more)', () => {
+  // Written with several spaces after the arrow: the label takes their place, with one space.
+  const wide = lines('flowchart TD', '  A   -->   B', '  B --> C');
+  const key = F.parseFlowchart(wide).edges[0].key;
+  assert.equal(ok(F.updateEdge(wide, key, { label: 'Yes' })).code, lines('flowchart TD', '  A   -->|"Yes"| B', '  B --> C'));
+  assert.equal(ok(F.updateEdge(wide, key, { line: 'dotted' })).code, lines('flowchart TD', '  A   -.->   B', '  B --> C'));
+  const inline = lines('flowchart TD', '  A -- old -->   B');
+  assert.equal(ok(F.updateEdge(inline, F.parseFlowchart(inline).edges[0].key, { label: 'new' })).code, lines('flowchart TD', '  A -->|"new"| B'));
+  const tight = lines('flowchart TD', '  A-->B');
+  assert.equal(ok(F.updateEdge(tight, F.parseFlowchart(tight).edges[0].key, { label: 'Yes' })).code, lines('flowchart TD', '  A-->|"Yes"|B'));
+  // Text Mermaid refuses is not managed: the line is left to the Code tab.
+  const bad = F.parseFlowchart(lines('flowchart TD', '  A -->|x|  B'));
+  assert.equal(bad.edges.length, 0);
+  assert.deepEqual(bad.unmanaged, [1]);
+  assert.equal(F.parseFlowchart(lines('flowchart TD', '  A -->|x| B')).edges.length, 1);
+  assert.equal(F.parseFlowchart(lines('flowchart TD', '  A -->|x|\tB')).edges.length, 1);
 });
 
 test('linkStyle numbers: edits that would renumber the styled edges are refused', () => {

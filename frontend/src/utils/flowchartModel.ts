@@ -407,8 +407,10 @@ function readLink(s: string, at: number): Link | null {
                 label = raw.trim();
             }
             if (label.trim() === '') return null;
+            // After the closing pipe Mermaid takes one space at most: `-->|x|  B` is a syntax error.
             i = close + 1;
-            while (i < s.length && /\s/.test(s[i])) i++;
+            if (/\s/.test(s[i] ?? '') && /\s/.test(s[i + 1] ?? '')) return null;
+            if (i < s.length && /\s/.test(s[i])) i++;
             return { start: at, end: i, stroke: rule.stroke, ...h, label, form: 'pipe', token, tokenStart, tokenEnd, pipeEnd: close + 1 };
         }
         // `-- text -->`: characters up to the first closing arrow, as the lexer reads them.
@@ -438,6 +440,41 @@ function readLink(s: string, at: number): Link | null {
         return { start: at, end: i + end[0].length, stroke: rule.stroke, ...h, label, form: 'inline', token, tokenStart, tokenEnd, pipeEnd: tokenEnd };
     }
     return null;
+}
+
+/** Whether a closing arrow of `rule` (`-->`, `==>`, `.->`) is anywhere in `s` from `from` on. */
+function closesLinkText(rule: LinkRule, s: string, from = 0): boolean {
+    for (let j = from; j < s.length; j++) if (sticky(rule.end!, s, j)) return true;
+    return false;
+}
+
+/**
+ * The rule of a `-- text` link that starts in the statement at `at` and is not closed on its line.
+ * Mermaid reads the following lines as the label, up to the closing arrow.
+ */
+function opensLinkText(s: string, at: number): LinkRule | null {
+    let i = at;
+    for (;;) {
+        for (;;) {
+            const ref = readRef(s, i);
+            if (!ref) return null;
+            i = ref.end;
+            const amp = sticky(/\s*&\s*/y, s, i);
+            if (!amp) break;
+            i += amp[0].length;
+        }
+        const link = readLink(s, i);
+        if (link) {
+            i = link.end;
+            continue;
+        }
+        for (const rule of LINK_RULES) {
+            const m = sticky(rule.re, s, i);
+            if (!m) continue;
+            return rule.text && !closesLinkText(rule, s, i + m[0].length) ? rule : null;
+        }
+        return null;
+    }
 }
 
 /** A statement of nodes and links (from `at` to `stop`), or null when any part is not read. */
@@ -575,6 +612,13 @@ export function parseFlowchart(code: string): FlowchartModel | null {
         }
 
         const spans = splitStatements(text);
+        // A link label that goes on to the next lines (`A -- first` / `second --> B`): left alone up to its arrow.
+        const openLink = i > header ? spans.map(([a]) => opensLinkText(text, a)).find((rule) => rule !== null) : undefined;
+        if (openLink) {
+            block = { role: 'unmanaged', close: (t) => closesLinkText(openLink, t) };
+            push({ kind: 'other', role: 'unmanaged', line: i, start: text.indexOf(trimmed), end: text.indexOf(trimmed) + trimmed.length });
+            return lineRoles.push('unmanaged');
+        }
         // Read every statement first; one the reader does not know makes the whole line unknown.
         const read = spans.map(([a, b], k) => readStatement(text, a, b, i === header && k === 0));
         const lineKnown = read.every((r) => r.kind !== 'other' || r.role !== 'unmanaged') && !(i !== header && DIRECTION_RULE.test(text) && read.some((r) => r.kind !== 'other'));
@@ -857,6 +901,8 @@ function arrowToken(stroke: Stroke, startHead: StartHead, endHead: EndHead): str
 }
 const styleToken = (style: LineStyle) => LINE_STYLES.find((s) => s.value === style)!.token;
 const pipeLabel = (label: string | null) => (label ? `|"${label}"|` : '');
+/** The spaces after a link: Mermaid takes one at most after a pipe label (`-->|x|  B` is a syntax error). */
+const afterPipe = (label: string | null, spaces: string) => (label && spaces.length > 1 ? ' ' : spaces);
 
 /** `from -->|"label"| to`. */
 export function edgeStatement(from: string, to: string, style: LineStyle, label: string | null): string {
@@ -1492,9 +1538,12 @@ export function updateEdge(code: string, key: string, spec: Partial<FlowEdgeSpec
         const lead = line.slice(link.start, link.tokenStart);
         const trail = line.slice(link.tokenEnd, link.end);
         const token = style ? styleToken(style) : arrowToken(link.stroke, link.startHead, link.endHead);
-        d.replace(st.line, link.start, link.end, `${lead}${token}${pipeLabel(label)}${trail || ' '}`);
+        d.replace(st.line, link.start, link.end, `${lead}${token}${pipeLabel(label)}${afterPipe(label, trail || ' ')}`);
     } else {
-        if (labelChanged) d.replace(st.line, link.tokenEnd, link.pipeEnd, pipeLabel(label));
+        if (labelChanged && link.form === 'plain') {
+            const line = stripCr(model.lines[st.line]);
+            d.replace(st.line, link.tokenEnd, link.end, `${pipeLabel(label)}${afterPipe(label, line.slice(link.tokenEnd, link.end))}`);
+        } else if (labelChanged) d.replace(st.line, link.tokenEnd, link.pipeEnd, pipeLabel(label));
         if (styleChanged && style) d.replace(st.line, link.tokenStart, link.tokenEnd, styleToken(style));
     }
     const expected = snapshot(model);

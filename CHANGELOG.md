@@ -4,6 +4,8 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-26
+
 ### Added
 
 - Quick add in the Build tab: type a product or icon name and press Enter. The field searches Mermaid's built-in icons and every installed pack, lists the best matches as text (official name, pack, technical name), and adds the chosen one as a service with its official name as the label, in the selected group (or the group of the selected node). The new service is selected and the field is ready for the next, so several services can be added in a row. A name that matches nothing becomes a service with the built-in `server` icon.

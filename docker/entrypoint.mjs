@@ -35,6 +35,11 @@ Settings (environment):
   STARTUP_DEADLINE_MS  How long to wait for the render service to become healthy (default 240000).
   TRUST_PROXY_HOPS     Proxies in front of this one whose X-Forwarded-For is trusted (default 0).
   PACKS_DIR            Icon packs directory, read by both programs and written by "packs".
+  SIRENIA_PACKS        Icon packs to install before starting, e.g. "gcp,aws,azure". Packs already
+                       installed are skipped. Needs SIRENIA_ACCEPT_PACK_TERMS=yes.
+  SIRENIA_ACCEPT_PACK_TERMS
+                       "yes" accepts the terms of the vendors named in SIRENIA_PACKS
+                       ("packs list" shows the recipes, "packs add <name>" shows the terms).
 `;
 
 /** Where the programs are, relative to the repository (or image) root. */
@@ -146,24 +151,73 @@ export function installedPrefixes(packsDir) {
 
 /**
  * The line printed after "Ready on port ...": the installed packs, or, with none installed and
- * recipes available, how to add one. Null when there is nothing to say (no packs and no recipes).
- * @param {{ installed: string[], recipes: { prefix: string }[], version: string }} state
+ * recipes available, how to add them. Null when there is nothing to say (no packs and no recipes).
+ * @param {{ installed: string[], recipes: { prefix: string }[] }} state
  */
-export function packsHint({ installed, recipes, version }) {
+export function packsHint({ installed, recipes }) {
   if (installed.length) return `Icon packs installed: ${installed.join(', ')}`;
   if (!recipes.length) return null;
-  const tag = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version) ? version : '<version>';
-  return `No icon pack is installed. To add one, run: docker run --rm -it -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:${tag} packs add ${recipes[0].prefix}\n`
-    + 'then restart this container and reload the page. See the README, section "Icon packs".';
+  return `No icon pack is installed. To install packs when the container starts, add to your docker run command: -e SIRENIA_PACKS=${recipes.map((r) => r.prefix).join(',')} -e SIRENIA_ACCEPT_PACK_TERMS=yes\n`
+    + 'The second setting accepts each vendor\'s terms ("packs list" names them). See the README, section "Icon packs".';
 }
 
-/** The hint for this installation: the packs directory is the one both programs read. */
+/** The directories the two programs read packs from: PACKS_DIR, or each program's default. */
+export function packTargets(env, where = layout()) {
+  if (env.PACKS_DIR) return [path.resolve(env.PACKS_DIR)];
+  return [path.join(where.backendDir, 'packs'), path.join(where.dist, 'packs')];
+}
+
+/** Prefixes installed in every target directory (the pack file is there). */
+export function installedEverywhere(dirs, prefixes) {
+  return prefixes.filter((p) => dirs.every((dir) => fs.existsSync(path.join(dir, `${p}.json`))));
+}
+
+const PACK_NAME = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+
+/**
+ * What to do with SIRENIA_PACKS before the servers start. Pure: the caller says which recipes exist
+ * and which packs are installed.
+ *  - `{ install: [], skip: [] }` when the variable is unset or empty, or everything is installed
+ *  - `{ install, skip }`: recipes to install (in the order given), packs already there
+ *  - `{ error }`: a name that is malformed or has no recipe; nothing may start
+ *  - `{ refuse }`: packs would be downloaded but SIRENIA_ACCEPT_PACK_TERMS is not "yes"; the
+ *    message names each vendor's terms
+ * @param {{ env: Record<string, string | undefined>, recipes: { prefix: string, label?: string, termsUrl?: string | null, iconsUrl?: string | null }[], installed: string[] }} state
+ */
+export function packInstallPlan({ env, recipes, installed }) {
+  const names = [...new Set(String(env.SIRENIA_PACKS ?? '').split(/[\s,]+/).filter(Boolean))];
+  if (!names.length) return { install: [], skip: [] };
+  const bad = names.filter((n) => !PACK_NAME.test(n));
+  if (bad.length) return { error: `SIRENIA_PACKS: ${bad.map((n) => JSON.stringify(n)).join(', ')} is not a pack name (lowercase letters, digits and hyphens).` };
+  const byPrefix = new Map(recipes.map((r) => [r.prefix, r]));
+  const unknown = names.filter((n) => !byPrefix.has(n));
+  if (unknown.length) {
+    return { error: `SIRENIA_PACKS: no recipe named ${unknown.map((n) => `"${n}"`).join(', ')}. Available: ${recipes.map((r) => r.prefix).join(', ') || 'none'}.` };
+  }
+  const skip = names.filter((n) => installed.includes(n));
+  const install = names.filter((n) => !installed.includes(n));
+  if (install.length && String(env.SIRENIA_ACCEPT_PACK_TERMS ?? '').trim().toLowerCase() !== 'yes') {
+    const lines = install.map((n) => {
+      const r = byPrefix.get(n);
+      return `  ${r.label || n} (${n}): terms ${r.termsUrl || '(see "packs add ' + n + '")'}${r.iconsUrl ? `, icons ${r.iconsUrl}` : ''}`;
+    });
+    return {
+      refuse: [
+        `SIRENIA_PACKS asks for icon packs that are not installed: ${install.join(', ')}. Their icons are the vendors' and may be used only under each vendor's terms:`,
+        ...lines,
+        'To accept these terms and install the packs, also set SIRENIA_ACCEPT_PACK_TERMS=yes. Nothing was downloaded.',
+      ].join('\n'),
+    };
+  }
+  return { install, skip };
+}
+
+/** The hint for this installation: the packs directory is the one the editor reads. */
 function startupHint(where, env) {
   const packsDir = env.PACKS_DIR ? path.resolve(env.PACKS_DIR) : path.join(where.dist, 'packs');
   return packsHint({
     installed: installedPrefixes(packsDir),
     recipes: discoverRecipes(recipesRoot(env, where.frontendDir)),
-    version: version(where),
   });
 }
 
@@ -196,12 +250,89 @@ function healthy(port) {
   });
 }
 
+/**
+ * The cause of a failed `packs add`, from its stderr: the generator's error line ("✖ sha256
+ * mismatch for ...", "✖ could not download ..."), else the last error line of a stack trace, else
+ * the last line that is not the summary.
+ */
+export function failureReason(stderr) {
+  const lines = String(stderr).split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('Not installed:') && !/^Node\.js v\d/.test(l));
+  const marked = lines.find((l) => l.startsWith('✖'));
+  if (marked) return marked.replace(/^✖\s*/, '');
+  return lines.findLast((l) => /\b[A-Za-z]*Error\b.*:/.test(l)) ?? lines.at(-1) ?? '';
+}
+
+/**
+ * Run `packs add <prefix> --accept-terms` for one pack, its output passed through. Resolves to
+ * `{ ok }` or `{ ok: false, reason }` (the last lines it wrote to stderr), or `{ stopped }` when a
+ * stop signal arrived meanwhile (the child is told to stop too).
+ */
+function installOne(where, prefix, dirs) {
+  return new Promise((resolve) => {
+    const args = [where.packs, 'add', prefix, '--accept-terms', ...dirs.flatMap((d) => ['--dir', d])];
+    const child = spawn(process.execPath, args, { cwd: where.root, env: process.env, stdio: ['ignore', 'inherit', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', (chunk) => {
+      process.stderr.write(chunk);
+      stderr = (stderr + chunk).slice(-4000);
+    });
+    let stopped = null;
+    const onSignal = (signal) => { stopped = signal; if (running(child)) child.kill(signal); };
+    for (const signal of STOP_SIGNALS) process.on(signal, onSignal);
+    const done = (result) => {
+      for (const signal of STOP_SIGNALS) process.off(signal, onSignal);
+      resolve(stopped ? { stopped } : result);
+    };
+    child.on('error', (error) => done({ ok: false, reason: error.message }));
+    child.on('exit', (code) => {
+      done(code === 0 ? { ok: true } : { ok: false, reason: failureReason(stderr) || `exit status ${code}` });
+    });
+  });
+}
+
+/**
+ * SIRENIA_PACKS: install the named packs that are missing, before anything starts. Network use is
+ * limited to this step (the `packs` command); the two servers never fetch. Returns an exit status
+ * when nothing may start (a bad name, terms not accepted, a stop request), otherwise null: a pack
+ * that failed to install is reported and the editor starts without it.
+ */
+async function installPacksFromEnv(where, env) {
+  if (!String(env.SIRENIA_PACKS ?? '').trim()) return null;
+  const dirs = packTargets(env, where);
+  const recipes = discoverRecipes(recipesRoot(env, where.frontendDir));
+  const plan = packInstallPlan({ env, recipes, installed: installedEverywhere(dirs, recipes.map((r) => r.prefix)) });
+  if (plan.error) {
+    console.error(`Refusing to start: ${plan.error}`);
+    return 2;
+  }
+  if (plan.refuse) {
+    console.error(`Refusing to start: ${plan.refuse}`);
+    return 2;
+  }
+  if (plan.skip.length) console.log(`Icon packs already installed: ${plan.skip.join(', ')}`);
+  const missing = [];
+  for (const prefix of plan.install) {
+    console.log(`Installing icon pack ${prefix} (SIRENIA_PACKS, terms accepted with SIRENIA_ACCEPT_PACK_TERMS=yes)...`);
+    const result = await installOne(where, prefix, dirs);
+    if (result.stopped) return exitStatus(null, result.stopped);
+    if (!result.ok) missing.push({ prefix, reason: result.reason });
+  }
+  for (const { prefix, reason } of missing) {
+    const label = recipes.find((r) => r.prefix === prefix)?.label || prefix;
+    console.error(`Icon pack ${label} (${prefix}) is NOT installed: ${reason}`);
+    console.error(`The editor starts without it; diagrams that use ${prefix}: icons are refused until it is installed. Restart the container to try again.`);
+  }
+  return null;
+}
+
 async function serve(where) {
   const settings = serveSettings(process.env);
   if (settings.error) {
     console.error(`Refusing to start: ${settings.error}`);
     return 1;
   }
+  const stop = await installPacksFromEnv(where, process.env);
+  if (stop !== null) return stop;
   const children = [];
   let stopping = null; // the signal being forwarded, once a stop was requested
 

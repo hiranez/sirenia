@@ -206,7 +206,7 @@ jobs:
           fail() { echo "::error::$1"; exit 1; }
           # As root, so that no directory is unreadable; -xdev stays on the image's own filesystem
           # (not /proc, /sys or the empty /packs volume).
-          found=$(docker run --rm --user 0 --entrypoint find "$IMAGE" / -xdev \( -name gcp.json -o -path '/app/*/packs/*.json' \) -print)
+          found=$(docker run --rm --user 0 --entrypoint find "$IMAGE" / -xdev \( -name gcp.json -o -name aws.json -o -name azure.json -o -path '/app/*/packs/*.json' \) -print)
           [ -z "$found" ] || fail "vendor pack files in the image: $found"
           docker run --rm --entrypoint sh "$IMAGE" -c 'test ! -e /app/frontend/dist/packs' || fail "the editor build ships dist/packs"
           echo "Image size: $(docker image inspect -f '{{.Size}}' "$IMAGE" | awk '{printf "%.0f MB", $1/1000000}')"
@@ -280,6 +280,16 @@ jobs:
           [ "$code" = "400" ] && jq -e '.code == "icon_pack_missing"' pack.svg >/dev/null \
             || fail "after packs remove: expected 400 icon_pack_missing, got $code $(cat pack.svg)"
           echo "Pack test passed (acceptance required, install, notice in export, list, remove)."
+      - name: SIRENIA_PACKS without accepting the terms refuses to start
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          set +e; docker run --rm -v sirenia-start-test:/packs -e SIRENIA_PACKS=aws,azure "$IMAGE" > start.log 2>&1; status=$?; set -e
+          cat start.log
+          [ "$status" = "2" ] || fail "expected exit 2, got $status"
+          grep -q 'aws.amazon.com/trademark-guidelines' start.log && grep -q 'learn.microsoft.com/en-us/azure/architecture/icons' start.log \
+            || fail "the refusal does not link each vendor's terms"
+          [ -z "$(docker run --rm -v sirenia-start-test:/packs --entrypoint find "$IMAGE" /packs -mindepth 1)" ] || fail "something was written to the volume"
+          docker volume rm sirenia-start-test
       - name: Stops cleanly on docker stop
         run: |
           start=$(date +%s)

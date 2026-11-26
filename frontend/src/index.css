@@ -654,7 +654,8 @@ body {
   color: #fcd34d;
 }
 
-.icon-picker-terms a {
+.icon-picker-terms a,
+.pack-help-table a {
   color: #a5b4fc;
 }
 

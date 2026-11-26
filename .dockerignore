@@ -31,10 +31,11 @@
 !frontend/upstream.js
 !frontend/packRecipes.js
 
-# The packs command, its index builder and the Google Cloud generator; recipes as text only.
+# The packs command, its index builder and the recipes' generators; recipes as text only.
 !scripts/packs.mjs
 !scripts/packs/
 !scripts/build-gcp-icon-pack.mjs
+!scripts/build-icon-pack.mjs
 !icons/*/mapping.json
 !icons/*/README.md
 
@@ -46,6 +47,8 @@ backend/packs
 frontend/public/packs
 frontend/dist
 **/gcp*.json
+**/aws*.json
+**/azure*.json
 **/node_modules
 **/tests
 **/*.test.*

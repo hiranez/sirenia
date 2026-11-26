@@ -1,0 +1,94 @@
+{
+  "$comment": "Recipe for the Azure architecture icons (prefix `azure`). Generator: scripts/build-icon-pack.mjs. Icon keys and names come from Microsoft's file names; `groups` gives the display names of Microsoft's category folders (an icon filed in several takes the first in this order); `overrides` spells the few names a file name cannot carry. See icons/azure/README.md.",
+  "version": "2026.11",
+  "prefix": "azure",
+  "pack": {
+    "label": "Microsoft Azure",
+    "owner": "Microsoft",
+    "termsUrl": "https://learn.microsoft.com/en-us/azure/architecture/icons/#icon-terms",
+    "generator": "scripts/build-icon-pack.mjs",
+    "terms": {
+      "summary": [
+        "Azure, Microsoft and the Azure product icons are trademarks of the Microsoft group of companies. They are not covered by this project's Apache-2.0 licence.",
+        "Microsoft permits the use of these icons in architectural diagrams, training materials or documentation. You may copy, distribute and display them only for that use, unless Microsoft gives you explicit permission. Microsoft reserves all other rights.",
+        "Do not crop, flip or rotate the icons, and do not distort or change their shape.",
+        "Use the icons to show how products work together, with the product name close to the icon. Do not use Microsoft product icons to represent your own product or service.",
+        "Microsoft's own terms, on its icon page at the link below, prevail over this summary. Microsoft's Trademark and Brand Guidelines also apply: https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks"
+      ],
+      "url": "https://learn.microsoft.com/en-us/azure/architecture/icons/#icon-terms"
+    },
+    "notice": {
+      "editor": "Azure, Microsoft and the Azure product icons are trademarks of the Microsoft group of companies, used here solely to depict Microsoft Azure products in architecture diagrams.",
+      "editorAfter": "Icons are used unmodified, as published by Microsoft.",
+      "export": "Azure, Microsoft and the Azure product icons are trademarks of the Microsoft group of companies, used unmodified solely to depict Microsoft Azure products in this architecture diagram."
+    }
+  },
+  "upstream": {
+    "page": "https://learn.microsoft.com/en-us/azure/architecture/icons/",
+    "release": "Azure Public Service Icons V25 (November 2026 update)",
+    "zips": {
+      "icons": {
+        "url": "https://arch-center.azureedge.net/icons/Azure_Public_Service_Icons_V25.zip",
+        "sha256": "f293d99252b3638557dd08ccbff9f2529083473d39b373fb2af29a7200351339"
+      }
+    }
+  },
+  "info": {
+    "name": "Azure architecture icons",
+    "author": "Microsoft",
+    "license": "Azure architecture icons, used under Microsoft's terms (see icons/azure/README.md)",
+    "samples": ["virtual-machine", "app-services", "storage-accounts"]
+  },
+  "kinds": {
+    "service": "service icons"
+  },
+  "sets": [
+    {
+      "kind": "service",
+      "zip": "icons",
+      "pattern": "^Azure_Public_Service_Icons/Icons/(?<group>[^/]+)/(?<id>\\d+) ?-icon-service-(?<name>[^/]+?) ?\\.svg$"
+    }
+  ],
+  "exclude": [
+    {
+      "pattern": "/10018-icon-service-Azure-A\\.svg$",
+      "reason": "The Azure logo (\"Azure A\"): a logo, not a product icon. The pack holds product icons only, as the AWS pack leaves out the group icon with the AWS logo."
+    }
+  ],
+  "groups": {
+    "ai + machine learning": "AI + machine learning",
+    "analytics": "Analytics",
+    "app services": "App services",
+    "azure ecosystem": "Azure ecosystem",
+    "blockchain": "Blockchain",
+    "compute": "Compute",
+    "containers": "Containers",
+    "databases": "Databases",
+    "developer tools": "Developer tools",
+    "devops": "DevOps",
+    "hybrid + multicloud": "Hybrid + multicloud",
+    "identity": "Identity",
+    "integration": "Integration",
+    "intune": "Intune",
+    "iot": "IoT",
+    "management + governance": "Management + governance",
+    "migrate": "Migrate",
+    "migration": "Migration",
+    "mixed reality": "Mixed reality",
+    "mobile": "Mobile",
+    "monitor": "Monitor",
+    "networking": "Networking",
+    "security": "Security",
+    "storage": "Storage",
+    "web": "Web",
+    "general": "General",
+    "menu": "Menu",
+    "other": "Other",
+    "new icons": "New icons"
+  },
+  "overrides": {
+    "Azure_Public_Service_Icons/Icons/other/033112809-icon-service-promethus.svg": { "name": "Prometheus", "key": "prometheus", "note": "the file name misspells Prometheus" },
+    "Azure_Public_Service_Icons/Icons/other/10422-icon-service-AzureAttestation.svg": { "name": "Azure Attestation", "key": "azure-attestation", "note": "the file name has no word separator" },
+    "Azure_Public_Service_Icons/Icons/identity/02251-icon-service-Entra-Privleged-Identity-Management.svg": { "name": "Entra Privileged Identity Management", "key": "entra-privileged-identity-management", "note": "the file name misspells Privileged" }
+  }
+}

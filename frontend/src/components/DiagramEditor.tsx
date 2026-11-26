@@ -65,6 +65,38 @@ const EXAMPLES: { name: string; code: string; requiresPack?: string }[] = [
   run:R --> L:sql
   run:B --> T:bq
   bq:R --> L:gcs`
+    },
+    {
+        name: 'AWS Architecture',
+        requiresPack: 'aws',
+        code: `architecture-beta
+  group cloud(aws:aws-cloud)[AWS Cloud]
+  group vpc(aws:virtual-private-cloud-vpc)[Virtual private cloud (VPC)] in cloud
+  service cdn(aws:amazon-cloudfront)[Amazon CloudFront] in cloud
+  service elb(aws:elastic-load-balancing)[Elastic Load Balancing] in vpc
+  service ecs(aws:amazon-elastic-container-service)[Amazon Elastic Container Service] in vpc
+  service db(aws:amazon-aurora)[Amazon Aurora] in vpc
+  service s3(aws:amazon-simple-storage-service)[Amazon Simple Storage Service] in cloud
+  cdn:R --> L:elb
+  elb:R --> L:ecs
+  ecs:B --> T:db
+  cdn:B --> T:s3`
+    },
+    {
+        name: 'Azure Architecture',
+        requiresPack: 'azure',
+        code: `architecture-beta
+  group sub(azure:subscriptions)[Azure subscription]
+  group vnet(azure:virtual-networks)[Azure Virtual Network] in sub
+  service fd(azure:front-door-and-cdn-profiles)[Azure Front Door] in sub
+  service app(azure:app-services)[Azure App Service] in vnet
+  service sql(azure:sql-database)[Azure SQL Database] in vnet
+  service kv(azure:key-vaults)[Azure Key Vault] in vnet
+  service st(azure:storage-accounts)[Azure Storage] in sub
+  fd:R --> L:app
+  app:R --> L:sql
+  app:B --> T:kv
+  fd:B --> T:st`
     }
 ];
 

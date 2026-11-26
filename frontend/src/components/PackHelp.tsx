@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import type { PackEntry } from '../utils/iconPacks';
-import { helpSections, listCommand, recipeRows, suggestedRecipe, type Recipe } from '../utils/packHelp';
+import { helpSections, listCommand, recipeRows, suggestedRecipes, type Recipe } from '../utils/packHelp';
 
 interface Props {
     recipes: Recipe[];
@@ -34,21 +34,27 @@ const CommandBlock: React.FC<{ command: string }> = ({ command }) => {
     );
 };
 
-// How to add an icon pack: the recipes this installation offers, and the exact commands. Text only:
-// vendor icons are drawn only inside diagrams.
+// A vendor's page, opened in a new tab without access back to this one.
+const VendorLink: React.FC<{ href: string; children: React.ReactNode }> = ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+);
+
+// How to add an icon pack: the recipes this installation offers, with the vendors' icon pages and
+// terms, and the exact commands. Text only: vendor icons are drawn only inside diagrams.
 const PackHelp: React.FC<Props> = ({ recipes, version, installed, onClose }) => {
     const id = useId();
     const dialogRef = useRef<HTMLDialogElement>(null);
     const rows = recipeRows(recipes, installed);
-    const suggested = suggestedRecipe(rows);
+    const suggested = suggestedRecipes(rows);
 
     useEffect(() => {
         const dialog = dialogRef.current;
         if (dialog && !dialog.open) dialog.showModal();
     }, []);
 
-    if (!suggested) return null;
-    const sections = helpSections(suggested.prefix, version);
+    if (!suggested.length) return null;
+    const sections = helpSections(suggested.map((r) => r.prefix), version);
+    const named = suggested.map((r) => r.label).join(', ');
     return (
         <dialog
             ref={dialogRef}
@@ -62,30 +68,37 @@ const PackHelp: React.FC<Props> = ({ recipes, version, installed, onClose }) => 
                 <div className="pack-help-scroll">
                     <p>
                         A pack is a set of a vendor's official product icons that you can use in diagrams. Sirenia does not
-                        contain the artwork: after you accept the vendor's terms in the terminal, it downloads the icons from the
+                        contain the artwork: after you accept the vendor's terms, it downloads the icons from the
                         vendor to your own machine.
                     </p>
                     <div className="pack-help-table-wrap">
                         <table className="pack-help-table">
                             <caption className="pack-help-caption">Packs you can add</caption>
                             <thead>
-                                <tr><th scope="col">Prefix</th><th scope="col">Pack</th><th scope="col">Owner</th><th scope="col">Status</th></tr>
+                                <tr><th scope="col">Pack</th><th scope="col">Prefix</th><th scope="col">Owner</th><th scope="col">Status</th><th scope="col">Vendor pages</th></tr>
                             </thead>
                             <tbody>
                                 {rows.map((r) => (
                                     <tr key={r.prefix}>
-                                        <td><code>{r.prefix}</code></td>
                                         <td>{r.label}</td>
+                                        <td><code>{r.prefix}</code></td>
                                         <td>{r.owner || '-'}</td>
                                         <td>{r.installed ? 'Installed' : 'Not installed'}</td>
+                                        <td>
+                                            {r.iconsUrl && <VendorLink href={r.iconsUrl}>Icons</VendorLink>}
+                                            {r.iconsUrl && r.termsUrl && ' · '}
+                                            {r.termsUrl && <VendorLink href={r.termsUrl}>Terms</VendorLink>}
+                                            {!r.iconsUrl && !r.termsUrl && '-'}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
                     <p>
-                        The commands below add <strong>{suggested.label}</strong> (<code>{suggested.prefix}</code>).
-                        {rows.length > 1 && ' For another pack, use its prefix from the table.'}
+                        The commands below add <strong>{named}</strong>. For fewer or other packs, change the prefixes in the
+                        command; the table lists them. Read each vendor's terms first: <code>packs add</code> asks you to accept
+                        them, and <code>SIRENIA_ACCEPT_PACK_TERMS=yes</code> accepts them for you.
                     </p>
                     {sections.map((section) => (
                         <section key={section.id} className="pack-help-section" aria-labelledby={`${id}-${section.id}`}>

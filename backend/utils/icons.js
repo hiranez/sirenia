@@ -86,16 +86,22 @@ function loadPacks(dir, productName, recipesDir = null) {
   const knownIcons = new Map(packs.map((p) => [p.prefix, new Set([...Object.keys(p.icons), ...Object.keys(p.aliases || {})])]));
 
   // The render page gets the Iconify part only. JSON.stringify output is valid JS, and '<' is
-  // escaped so the payload stays inert even if it were ever placed via innerHTML.
-  const iconify = packs.map((p) => {
+  // escaped so the payload stays inert even if it were ever placed via innerHTML. Each pack is
+  // serialized once, here; a render page gets only the packs its diagram refers to.
+  const pageJson = new Map(packs.map((p) => {
     const copy = { ...p };
     delete copy.sirenia;
-    return copy;
-  });
-  const script = `window.__ICON_PACKS__=${JSON.stringify(iconify)
-    .replace(/</g, '\\u003c')
-    // U+2028/U+2029 are line terminators in JS source but not in JSON; escape them too.
-    .replace(/[\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16)}`)};`;
+    return [p.prefix, JSON.stringify(copy)
+      .replace(/</g, '\\u003c')
+      // U+2028/U+2029 are line terminators in JS source but not in JSON; escape them too.
+      .replace(/[\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16)}`)];
+  }));
+  /** The page script that registers the packs named in `prefixes` (unknown prefixes are ignored). */
+  const iconPacksScript = (prefixes) => {
+    const wanted = new Set(prefixes);
+    return `window.__ICON_PACKS__=[${packs.filter((p) => wanted.has(p.prefix)).map((p) => pageJson.get(p.prefix)).join(',')}];`;
+  };
+  const script = iconPacksScript(packs.map((p) => p.prefix));
 
   // `prefix:name` reference pattern. Kept as a SOURCE string: a shared /g RegExp is stateful
   // (lastIndex survives across calls and is inherited by matchAll clones), which silently skips
@@ -148,10 +154,36 @@ function loadPacks(dir, productName, recipesDir = null) {
     return [...missing].filter(([prefix]) => used.has(prefix)).map(([prefix, label]) => ({ prefix, label }));
   }
 
-  /** Prefixes of installed packs the diagram references (e.g. `gcp:cloud-run`), in pack order. */
+  // Which packs a render page needs. Deliberately wider than packsUsedBy: Mermaid also resolves
+  // `gcp-cloud-run` as `gcp:cloud-run`, so a prefix followed by ":" or "-" anywhere (any case)
+  // counts, and each prefix is looked for on its own (`gcp-legacy:x` names both gcp and gcp-legacy).
+  // A pack loaded for nothing costs time only; a pack left out would draw Mermaid's "?" icon.
+  const renderPatterns = packs.map((p) => [p.prefix, new RegExp(`(?<![A-Za-z0-9_-])${escapeRegExp(p.prefix)}[:-]`, 'i')]);
+  /** Prefixes of the installed packs a render of `code` may need, in pack order. */
+  function packsForRender(code) {
+    const text = String(code);
+    return renderPatterns.filter(([, re]) => re.test(text)).map(([prefix]) => prefix);
+  }
+
+  // Mermaid also draws `gcp-cloud-run` (a dash in place of the colon) with the pack's icon. That
+  // form counts as a use when the name is one the pack has, so the export still carries the notice.
+  // Kept as source strings for the same reason as `refSource`.
+  const dashSources = packs.map((p) => [p.prefix, `(?<![A-Za-z0-9_:-])${escapeRegExp(p.prefix)}-([A-Za-z0-9_-]+)`]);
+
+  /**
+   * Prefixes of installed packs whose icons the diagram uses (`gcp:cloud-run`, or `gcp-cloud-run`
+   * when the pack has that icon), in pack order.
+   */
   function packsUsedBy(code) {
+    const text = String(code);
     const used = new Set();
-    for (const m of refs(code)) used.add(m[1]);
+    for (const m of refs(text)) used.add(m[1]);
+    for (const [prefix, source] of dashSources) {
+      if (used.has(prefix)) continue;
+      for (const m of text.matchAll(new RegExp(source, 'g'))) {
+        if (knownIcons.get(prefix).has(m[1])) { used.add(prefix); break; }
+      }
+    }
     return packs.map((p) => p.prefix).filter((prefix) => used.has(prefix));
   }
 
@@ -166,7 +198,10 @@ function loadPacks(dir, productName, recipesDir = null) {
     return texts.length ? texts.join(' ') : null;
   }
 
-  return { ICON_PACKS: packs, ICON_PACKS_SCRIPT: script, KNOWN_ICONS: knownIcons, findUnknownIcons, findMissingPacks, packsUsedBy, attributionNotice };
+  return {
+    ICON_PACKS: packs, ICON_PACKS_SCRIPT: script, KNOWN_ICONS: knownIcons,
+    iconPacksScript, packsForRender, findUnknownIcons, findMissingPacks, packsUsedBy, attributionNotice,
+  };
 }
 
 module.exports = { PACKS_DIR, PACK_RECIPES_DIR, loadPacks, ...loadPacks(PACKS_DIR, PRODUCT_NAME, PACK_RECIPES_DIR) };

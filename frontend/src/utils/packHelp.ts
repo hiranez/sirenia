@@ -4,7 +4,9 @@
  * packs, and then the editor offers no install instructions.
  *
  * The functions are pure, so they also run under `node --test`. The route's answer is untrusted
- * input: anything unexpected drops the entry (or the whole answer) and never throws into the UI.
+ * input: anything unexpected drops the entry (or the whole answer) and never throws into the UI. The
+ * two vendor links of a recipe are shown as links, so each must be a plain https URL; a recipe with
+ * a link that is not is dropped.
  */
 import type { PackEntry } from './iconPacks';
 
@@ -15,6 +17,7 @@ const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 const CONTROL_CHARS = /[\p{Cc}\p{Zl}\p{Zp}]/u;
 const NAME_MAX = 80;
 const VERSION_MAX = 40;
+const URL_MAX = 500;
 const MAX_RECIPES = 100;
 const IMAGE = 'ghcr.io/hiranez/sirenia';
 const VERSION_PLACEHOLDER = '<version>';
@@ -23,6 +26,10 @@ export interface Recipe {
     prefix: string;
     label: string;
     owner: string;
+    /** The vendor's page of official icons. */
+    iconsUrl: string | null;
+    /** The vendor's terms for the icons. */
+    termsUrl: string | null;
 }
 
 export interface RecipeInfo {
@@ -44,7 +51,7 @@ export interface HelpStep {
 }
 
 export interface HelpSection {
-    id: 'docker' | 'compose' | 'source';
+    id: 'start' | 'docker' | 'compose' | 'source';
     title: string;
     steps: HelpStep[];
 }
@@ -57,9 +64,21 @@ function name(value: unknown): string | null {
     return value;
 }
 
+/** A link to show: absent or null is null; an https URL is kept; anything else is undefined (unusable). */
+export function link(value: unknown): string | null | undefined {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== 'string' || value.length > URL_MAX || !value.startsWith('https://') || /[\s\p{Cc}]/u.test(value)) return undefined;
+    try {
+        return new URL(value).protocol === 'https:' ? value : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 /**
- * Validate a parsed `/pack-recipes.json`. A wrong shape means no recipes; a bad entry is dropped; a
- * repeated prefix keeps the first. An unusable label falls back to the prefix, an unusable owner to "".
+ * Validate a parsed `/pack-recipes.json`. A wrong shape means no recipes; a bad entry (including one
+ * whose icon or terms link is not an https URL) is dropped; a repeated prefix keeps the first. An
+ * unusable label falls back to the prefix, an unusable owner to "".
  */
 export function parseRecipes(data: unknown): RecipeInfo {
     if (!isObject(data) || data.format !== 1 || !Array.isArray(data.recipes) || data.recipes.length > MAX_RECIPES) return NONE;
@@ -68,8 +87,11 @@ export function parseRecipes(data: unknown): RecipeInfo {
     const recipes: Recipe[] = [];
     for (const raw of data.recipes) {
         if (!isObject(raw) || typeof raw.prefix !== 'string' || !PREFIX.test(raw.prefix) || seen.has(raw.prefix)) continue;
+        const iconsUrl = link(raw.iconsUrl);
+        const termsUrl = link(raw.termsUrl);
+        if (iconsUrl === undefined || termsUrl === undefined) continue;
         seen.add(raw.prefix);
-        recipes.push({ prefix: raw.prefix, label: name(raw.label) ?? raw.prefix, owner: name(raw.owner) ?? '' });
+        recipes.push({ prefix: raw.prefix, label: name(raw.label) ?? raw.prefix, owner: name(raw.owner) ?? '', iconsUrl, termsUrl });
     }
     return { version, recipes };
 }
@@ -98,9 +120,10 @@ export function recipeRows(recipes: Recipe[], installed: Pick<PackEntry, 'prefix
     return recipes.map((r) => ({ ...r, installed: have.has(r.prefix) }));
 }
 
-/** The recipe the commands are shown for: the first that is not installed, else the first. */
-export function suggestedRecipe(rows: RecipeRow[]): RecipeRow | null {
-    return rows.find((r) => !r.installed) ?? rows[0] ?? null;
+/** The recipes the commands are shown for: those not installed yet, or all of them when every one is. */
+export function suggestedRecipes(rows: RecipeRow[]): RecipeRow[] {
+    const missing = rows.filter((r) => !r.installed);
+    return missing.length ? missing : rows;
 }
 
 /** `packs list`, run the way the published image is run. */
@@ -108,19 +131,37 @@ export function listCommand(version: string | null): string {
     return `docker run --rm -it -v sirenia-packs:/packs ${IMAGE}:${version ?? VERSION_PLACEHOLDER} packs list`;
 }
 
-/** The three ways to add the pack of `prefix`, each as numbered steps with the exact commands. */
-export function helpSections(prefix: string, version: string | null): HelpSection[] {
-    const reload = { text: 'Reload this page. The pack is then listed here and in the editor.' };
+/** The one-command start: the published image, installing `prefixes` before it starts. */
+export function startCommand(prefixes: string[], version: string | null): string {
+    return `docker run --rm -p 8080:8080 -v sirenia-packs:/packs -e SIRENIA_PACKS=${prefixes.join(',')} -e SIRENIA_ACCEPT_PACK_TERMS=yes ${IMAGE}:${version ?? VERSION_PLACEHOLDER}`;
+}
+
+/** The ways to add the packs of `prefixes`, simplest first, each as numbered steps with the exact commands. */
+export function helpSections(prefixes: string[], version: string | null): HelpSection[] {
+    const names = prefixes.join(' ');
+    const image = `${IMAGE}:${version ?? VERSION_PLACEHOLDER}`;
+    const volume = 'The -v sirenia-packs:/packs part must be the same volume the server was started with. A different volume installs the packs where the server does not look.';
+    const asks = `It shows each vendor's terms, asks you to accept them, then downloads the icons:`;
+    const reload = { text: 'Reload this page. The packs are then listed here and in the editor.' };
     return [
         {
-            id: 'docker',
-            title: 'Docker, published image',
+            id: 'start',
+            title: 'Docker, published image: start with the packs (simplest)',
             steps: [
+                { text: 'Stop the running container.' },
                 {
-                    text: "Run this in a terminal. It shows the vendor's terms, asks you to accept them, then downloads the icons:",
-                    command: `docker run --rm -it -v sirenia-packs:/packs ${IMAGE}:${version ?? VERSION_PLACEHOLDER} packs add ${prefix}`,
-                    note: 'The -v sirenia-packs:/packs part must be the same volume the server was started with. A different volume installs the pack where the server does not look.',
+                    text: "Start it again with two more settings. SIRENIA_PACKS names the packs; SIRENIA_ACCEPT_PACK_TERMS=yes says that you accept each vendor's terms, linked in the table above. The icons are downloaded once, into the volume:",
+                    command: startCommand(prefixes, version),
+                    note: volume,
                 },
+                reload,
+            ],
+        },
+        {
+            id: 'docker',
+            title: 'Docker, published image: add to the installation',
+            steps: [
+                { text: `Run this in a terminal. ${asks}`, command: `docker run --rm -it -v sirenia-packs:/packs ${image} packs add ${names}`, note: volume },
                 { text: 'Stop the running container, then start it again with the same command as before. Packs are read when the server starts, so a restart is needed.' },
                 reload,
             ],
@@ -129,8 +170,8 @@ export function helpSections(prefix: string, version: string | null): HelpSectio
             id: 'compose',
             title: 'Docker Compose (built from source)',
             steps: [
-                { text: "Run this in the project folder. It shows the vendor's terms, asks you to accept them, then downloads the icons:", command: `docker compose run --rm sirenia packs add ${prefix}` },
-                { text: 'Restart the server so that it reads the pack:', command: 'docker compose restart sirenia' },
+                { text: `Run this in the project folder. ${asks}`, command: `docker compose run --rm sirenia packs add ${names}` },
+                { text: 'Restart the server so that it reads the packs:', command: 'docker compose restart sirenia' },
                 reload,
             ],
         },
@@ -138,8 +179,8 @@ export function helpSections(prefix: string, version: string | null): HelpSectio
             id: 'source',
             title: 'From source',
             steps: [
-                { text: "Run this in the project folder. It shows the vendor's terms, asks you to accept them, then downloads the icons:", command: `npm run packs -- add ${prefix}` },
-                { text: 'Restart the two programs, the render service and the editor\'s server, so that they read the pack.' },
+                { text: `Run this in the project folder. ${asks}`, command: `npm run packs -- add ${names}` },
+                { text: 'Restart the two programs, the render service and the editor\'s server, so that they read the packs.' },
                 reload,
             ],
         },

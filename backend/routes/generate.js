@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const puppeteer = require('puppeteer');
 const { injectMetadata } = require('../utils/metadata');
-const { ICON_PACKS_SCRIPT, findUnknownIcons, findMissingPacks, packsUsedBy, attributionNotice } = require('../utils/icons');
+const { iconPacksScript, packsForRender, findUnknownIcons, findMissingPacks, packsUsedBy, attributionNotice } = require('../utils/icons');
 const { COLLECT_EXTERNAL_REFS_SCRIPT } = require('../utils/externalRefs');
 
 // ---- Security / resource constants -----------------------------------------
@@ -27,7 +27,9 @@ const SOURCE_KEY = 'SireniaSource';
 const MERMAID_PATH = require.resolve('mermaid/dist/mermaid.min.js');
 // Read once at module load; fail fast at startup if the bundle is missing.
 const MERMAID_SRC = fs.readFileSync(MERMAID_PATH, 'utf8');
-// Icon packs are read from the local packs directory the same way (PACKS_DIR) — see utils/icons.js.
+// Icon packs are read from the local packs directory the same way (PACKS_DIR), see utils/icons.js.
+// Each render page gets only the packs its diagram refers to: the vendor packs are megabytes of
+// JSON, and parsing all of them on every page made every export slower.
 
 // One JSON object per line: Cloud Logging parses it into jsonPayload, so launch and render
 // durations can be charted and alerted on. Never include diagram content.
@@ -249,9 +251,10 @@ async function generateImage(req, res) {
 async function renderToBuffer(page, type, output, code) {
   if (type === 'mermaid') {
     await page.setContent(getMermaidShell(), { waitUntil: 'domcontentloaded' });
-    // Inject the bundled Mermaid runtime and icon packs from the local filesystem (no network).
+    // Inject the bundled Mermaid runtime and the icon packs the diagram refers to, from memory
+    // (read from local disk at start-up; no network).
     await page.addScriptTag({ content: MERMAID_SRC });
-    await page.addScriptTag({ content: ICON_PACKS_SCRIPT });
+    await page.addScriptTag({ content: iconPacksScript(packsForRender(code)) });
 
     // securityLevel:'strict' disables HTML/JS in labels and click bindings; htmlLabels:false
     // keeps text as SVG <text>.

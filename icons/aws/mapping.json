@@ -1,0 +1,119 @@
+{
+  "$comment": "Recipe for the AWS Architecture Icons (prefix `aws`). Generator: scripts/build-icon-pack.mjs. Icon keys and names come from AWS's file names; `sets` choose the files, `exclude` says what is left out and why, `groups` gives AWS's category names, `overrides` spells the few names a file name cannot carry. See icons/aws/README.md.",
+  "version": "2026.07",
+  "prefix": "aws",
+  "pack": {
+    "label": "AWS",
+    "owner": "Amazon Web Services",
+    "termsUrl": "https://aws.amazon.com/trademark-guidelines/",
+    "generator": "scripts/build-icon-pack.mjs",
+    "terms": {
+      "summary": [
+        "Amazon Web Services, AWS and the AWS Architecture Icons are trademarks of Amazon.com, Inc. or its affiliates. They are not covered by this project's Apache-2.0 licence.",
+        "AWS allows customers and partners to use these icons to create architecture diagrams. Its icon page says they can also go into materials such as whitepapers, presentations, data sheets and posters.",
+        "The AWS Trademark Guidelines apply: do not alter the icons, do not use them in your own product's branding or look and feel, and do not imply that AWS sponsors or endorses you.",
+        "AWS's own terms prevail over this summary: the icon page (https://aws.amazon.com/architecture/icons/) and the AWS Trademark Guidelines at the link below."
+      ],
+      "url": "https://aws.amazon.com/trademark-guidelines/"
+    },
+    "notice": {
+      "editor": "Amazon Web Services, AWS and the AWS Architecture Icons are trademarks of Amazon.com, Inc. or its affiliates, used here solely to depict AWS products in architecture diagrams.",
+      "editorAfter": "Icons are used unmodified, as published by AWS.",
+      "export": "Amazon Web Services, AWS and the AWS Architecture Icons are trademarks of Amazon.com, Inc. or its affiliates, used unmodified solely to depict AWS products in this architecture diagram."
+    }
+  },
+  "upstream": {
+    "page": "https://aws.amazon.com/architecture/icons/",
+    "release": "Icon package of 31 July 2026 (Q3 2026)",
+    "zips": {
+      "icons": {
+        "url": "https://d1.awsstatic.com/onedam/marketing-channels/website/public/shared/architecture-icon-release/Icon-package_07312026.5846e92413caa21490223536cc97f1269e44fa92.zip",
+        "sha256": "d2d166c453526471749d520e0db022c459abef759d2946cf2dd1d1c992dc6526"
+      }
+    }
+  },
+  "info": {
+    "name": "AWS Architecture Icons",
+    "author": "Amazon Web Services",
+    "license": "AWS Architecture Icons, used under AWS's terms (see icons/aws/README.md)",
+    "samples": ["amazon-ec2", "aws-lambda", "amazon-simple-storage-service"]
+  },
+  "kinds": {
+    "service": "service icons",
+    "resource": "resource icons",
+    "group": "group icons",
+    "category": "category icons"
+  },
+  "sets": [
+    {
+      "kind": "service",
+      "zip": "icons",
+      "pattern": "^Architecture-Service-Icons_\\d+/Arch_(?<group>[^/]+)/(?:16|32|48|64)/Arch_(?<name>[^/]+?)(?:_Light)?_(?:16|32|48|64)\\.svg$"
+    },
+    {
+      "kind": "group",
+      "zip": "icons",
+      "group": "Groups",
+      "pattern": "^Architecture-Group-Icons_\\d+/(?<name>[^/]+?)_32(?:_Dark)?\\.svg$"
+    },
+    {
+      "kind": "resource",
+      "zip": "icons",
+      "pattern": "^Resource-Icons_\\d+/Res_(?<group>[^/]+)/(?:Res_48_(?:Light|Dark)/)?Res_(?<name>[^/]+?)_48(?:_Light|_Dark)?\\.svg$"
+    },
+    {
+      "kind": "category",
+      "zip": "icons",
+      "group": "Categories",
+      "nameFromGroups": true,
+      "pattern": "^Category-Icons_\\d+/Arch-Category_(?:16|32|48|64)/Arch-Category_(?<name>[^/]+?)_(?:16|32|48|64)\\.svg$"
+    }
+  ],
+  "exclude": [
+    { "pattern": "_Dark(_\\d+)?\\.svg$", "reason": "Variants for dark backgrounds: the pack has the standard variant of each icon." },
+    { "pattern": "/Arch_Management-Tools/64/Arch_AWS-Compute-Optimizer_64\\.svg$|/Arch_Media-Services/64/Arch_Amazon-Kinesis-Video-Streams_64\\.svg$", "reason": "Second copies of services AWS files in two categories, coloured for the second category: the pack has the copy of the first (AWS Compute Optimizer in Compute, Amazon Kinesis Video Streams in Analytics)." },
+    { "pattern": "/Res_Amazon-EC2_Auto-Scaling_48\\.svg$|/Res_AWS-Management-Console_48(_Light)?\\.svg$", "reason": "Resource icons named exactly like a service icon (Amazon EC2 Auto Scaling, AWS Management Console): the name belongs to the service icon." },
+    { "pattern": "/AWS-Cloud-logo_32\\.svg$", "reason": "The AWS Cloud group icon that contains the AWS logo: the AWS Cloud group icon without the logo is included." },
+    { "pattern": "/(?:16|32|48)/Arch_[^/]+\\.svg$|/Arch-Category_(?:16|32|48)/", "reason": "The 16, 32 and 48 px versions of the service and category icons: the pack has one size, the 64 px version (Mermaid draws icons 80 px wide)." }
+  ],
+  "groups": {
+    "Analytics": "Analytics",
+    "Application-Integration": "Application Integration",
+    "Artificial-Intelligence": "Artificial Intelligence",
+    "Blockchain": "Blockchain",
+    "Business-Applications": "Business Applications",
+    "Cloud-Financial-Management": "Cloud Financial Management",
+    "Compute": "Compute",
+    "Containers": "Containers",
+    "Customer-Enablement": "Customer Enablement",
+    "Customer-Experience": "Customer Experience",
+    "Databases": "Databases",
+    "Developer-Tools": "Developer Tools",
+    "End-User-Computing": "End User Computing",
+    "Front-End-Web-Mobile": "Front-End Web & Mobile",
+    "Games": "Games",
+    "Internet-of-Things": "Internet of Things",
+    "IoT": "Internet of Things",
+    "Management-Governance": "Management & Governance",
+    "Management-Tools": "Management Tools",
+    "Media-Services": "Media Services",
+    "Migration-Modernization": "Migration & Modernization",
+    "Multicloud-and-Hybrid": "Multicloud & Hybrid",
+    "Networking-Content-Delivery": "Networking & Content Delivery",
+    "Quantum-Technologies": "Quantum Technologies",
+    "Satellite": "Satellite",
+    "Security-Identity": "Security & Identity",
+    "Serverless": "Serverless",
+    "Storage": "Storage",
+    "General-Icons": "General"
+  },
+  "overrides": {
+    "Architecture-Service-Icons_07312026/Arch_Networking-Content-Delivery/64/Arch_AWS-Site-to-Site-VPN_64.svg": { "name": "AWS Site-to-Site VPN", "note": "the hyphens are part of the name" },
+    "Architecture-Service-Icons_07312026/Arch_Artificial-Intelligence/64/Arch_Amazon-Augmented-AI-A2I_64.svg": { "name": "Amazon Augmented AI (A2I)", "note": "a file name has no parentheses" },
+    "Architecture-Service-Icons_07312026/Arch_Storage/64/Arch_Amazon-FSx-for-WFS_64.svg": { "name": "Amazon FSx for Windows File Server", "note": "the file name abbreviates the product name" },
+    "Architecture-Service-Icons_07312026/Arch_Customer-Enablement/64/Arch_AWS-Training-Certification_64.svg": { "name": "AWS Training and Certification", "note": "the file name drops a word of the name" },
+    "Architecture-Service-Icons_07312026/Arch_Customer-Enablement/64/Arch_AWS-rePost_64.svg": { "name": "AWS re:Post", "note": "a file name has no colon" },
+    "Architecture-Service-Icons_07312026/Arch_Customer-Enablement/64/Arch_AWS-rePost-Private_64.svg": { "name": "AWS re:Post Private", "note": "a file name has no colon" },
+    "Architecture-Group-Icons_07312026/Virtual-private-cloud-VPC_32.svg": { "name": "Virtual private cloud (VPC)", "note": "a file name has no parentheses" }
+  }
+}

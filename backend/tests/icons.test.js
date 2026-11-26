@@ -139,6 +139,25 @@ check('inline pack script is inert (no raw "<", U+2028/U+2029 escaped) and carri
   assert.deepStrictEqual(page[0].aliases, demoPack().aliases);
 });
 
+check('a render page gets only the packs its diagram may need', () => {
+  const { packsForRender, iconPacksScript, ICON_PACKS_SCRIPT } = fixtures;
+  const page = (prefixes) => JSON.parse(iconPacksScript(prefixes).slice('window.__ICON_PACKS__='.length, -1)).map((p) => p.prefix);
+  assert.deepStrictEqual(packsForRender('graph TD; A-->B'), []);
+  assert.strictEqual(iconPacksScript(packsForRender('graph TD; A-->B')), 'window.__ICON_PACKS__=[];');
+  assert.deepStrictEqual(packsForRender('architecture-beta\n  service a(dots:dot)[Dot]'), ['dots']);
+  assert.deepStrictEqual(packsForRender('n@{ icon: "plain:bar" }\nm@{ icon: "demo:box" }'), ['demo', 'plain']);
+  // Wider than packsUsedBy: Mermaid also reads `demo-square` as demo:square; any case; inside labels.
+  assert.deepStrictEqual(packsForRender('service a(demo-square)[x]'), ['demo']);
+  assert.deepStrictEqual(packsForRender('service a(cloud)[DEMO: the plan]'), ['demo']);
+  // Not a reference: part of a longer word, or a prefix without ":" or "-".
+  assert.deepStrictEqual(packsForRender('service a(cloud)[mydemo:x xdots-y plain]'), []);
+  assert.deepStrictEqual(page(['plain', 'demo', 'nope']), ['demo', 'plain'], 'pack order, unknown prefixes ignored');
+  assert.strictEqual(iconPacksScript(['demo', 'dots', 'plain']), ICON_PACKS_SCRIPT, 'all packs: the same script as before');
+  const nested = loadPacks(packDir({ 'demo.json': demoPack(), 'demo-two.json': { ...demoPack(), prefix: 'demo-two' } }), 'Test');
+  assert.deepStrictEqual(nested.packsForRender('a(demo-two:square)').sort(), ['demo', 'demo-two'], 'a prefix inside another is still found');
+  assert.deepStrictEqual(loadPacks(packDir({}), 'Test').packsForRender('a(demo:square)'), []);
+});
+
 check('icon bodies may use same-document references (ids, gradients, <use href="#id">, url(#id))', () => {
   assert.ok(fixtures.KNOWN_ICONS.get('dots').has('dot'));
 });

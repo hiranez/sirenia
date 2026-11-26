@@ -5,7 +5,7 @@
 // `index.json`, which this command rebuilds after every change.
 //
 //   node scripts/packs.mjs list   [--dir <packs dir>]...
-//   node scripts/packs.mjs add <recipe> [--dir <dir>]... [--accept-terms] [--offline]
+//   node scripts/packs.mjs add <recipe>... [--dir <dir>]... [--accept-terms] [--offline]
 //   node scripts/packs.mjs add --file <iconify.json> [--dir <dir>]...
 //   node scripts/packs.mjs remove <prefix> [--dir <dir>]...
 //
@@ -13,7 +13,7 @@
 // The generator is run as `node <generator> --mapping <recipe> --out <dir>/<prefix>.json --no-docs
 // [--offline] [--cache <dir>]`; `--cache` is passed only when PACKS_CACHE_DIR is set (the generator's
 // own default download cache is inside the repository, which the container image cannot write).
-// Node built-ins only; the recipe's generator may need more (the Google Cloud one needs `fflate`).
+// Node built-ins only; the recipes' generators need `fflate`.
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
@@ -29,21 +29,23 @@ const GENERATOR_TIMEOUT_MS = 10 * 60 * 1000;
 
 const HELP = `Usage:
   node scripts/packs.mjs list   [--dir <packs dir>]...
-  node scripts/packs.mjs add <recipe> [--dir <dir>]... [--accept-terms] [--offline]
+  node scripts/packs.mjs add <recipe>... [--dir <dir>]... [--accept-terms] [--offline]
   node scripts/packs.mjs add --file <iconify.json> [--dir <dir>]...
   node scripts/packs.mjs remove <prefix> [--dir <dir>]...
 
 Commands:
   list     Show the available recipes and the packs installed in each directory.
-  add      Install a pack. From a recipe: shows the vendor's terms, asks you to accept them,
-           then downloads the artwork from the vendor, checks pinned SHA-256 checksums and writes
-           the pack. With --file: installs an Iconify JSON pack you supply.
+  add      Install packs. From recipes (one or more, e.g. "add gcp aws azure"): shows each
+           vendor's terms, asks you to accept them, then downloads the artwork from the vendor,
+           checks pinned SHA-256 checksums and writes the pack. With --file: installs an Iconify
+           JSON pack you supply.
   remove   Delete a pack and rebuild the index.
 
 Options:
   --dir <dir>        Packs directory (repeatable). Default: $PACKS_DIR if set, otherwise
                      backend/packs and frontend/public/packs of this repository.
-  --accept-terms     Accept the vendor's terms without prompting (needed when stdin is not a terminal).
+  --accept-terms     Accept the terms of the vendors named on the command line without prompting
+                     (needed when stdin is not a terminal).
   --offline          Recipes only: use the local download cache, never the network.
   --file <file>      Install this Iconify JSON file as a pack (its "prefix" names the pack).
   --recipes <dir>    Recipes directory (default: $PACK_RECIPES_DIR, otherwise icons/).
@@ -231,30 +233,8 @@ function cmdList(opts) {
   }
 }
 
-async function acceptance(opts, recipe) {
-  if (opts.acceptTerms) { console.log('\nTerms accepted with --accept-terms.'); return; }
-  if (!process.stdin.isTTY) {
-    console.error(`\nThe terms above must be accepted before anything is downloaded. Re-run with --accept-terms to accept them. Nothing was downloaded or written.`);
-    process.exit(2);
-  }
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await rl.question(`\nDo you accept these terms for the ${recipe.label} icons? Type "yes" to continue: `);
-  rl.close();
-  if (answer.trim().toLowerCase() !== 'yes') throw new Failure('Terms not accepted. Nothing was downloaded or written.');
-}
-
-async function cmdAddRecipe(opts, name) {
-  checkName(name, 'recipe name');
-  const recipes = discoverRecipes(opts);
-  const recipe = recipes.get(name);
-  if (!recipe) {
-    throw new Failure(`No recipe named "${name}". Available: ${[...recipes.keys()].join(', ') || 'none'}. To install your own pack use: add --file <iconify.json>`);
-  }
-  checkTerms(recipe);
-  const generator = path.resolve(repoRoot, recipe.generator);
-  if (!fs.existsSync(generator)) throw new Failure(`The generator of recipe "${name}" is missing: ${generator}`);
-
-  console.log(`${recipe.label} icon pack${recipe.owner ? `, artwork by ${recipe.owner}` : ''} (prefix: ${recipe.prefix})`);
+function showTerms(opts, recipe) {
+  console.log(`\n== ${recipe.label} icon pack${recipe.owner ? `, artwork by ${recipe.owner}` : ''} (prefix: ${recipe.prefix})`);
   const urls = upstreamUrls(recipe);
   console.log(opts.offline
     ? '\nThe artwork is read from the local download cache (--offline); nothing is fetched from the network.'
@@ -263,11 +243,42 @@ async function cmdAddRecipe(opts, name) {
   console.log('\nTerms (summary):');
   for (const line of recipe.terms.summary) console.log(`  - ${line}`);
   console.log(`\nFull terms: ${recipe.terms.url}`);
-  await acceptance(opts, recipe);
+}
 
-  const dirs = targetDirs(opts);
+/**
+ * The recipes whose terms are accepted: all of them with --accept-terms, otherwise each one the
+ * person types "yes" for. Without a terminal and without --accept-terms nothing is accepted and the
+ * command stops (exit 2) before anything is downloaded.
+ */
+async function acceptance(opts, recipes) {
+  if (opts.acceptTerms) {
+    console.log(`\nTerms accepted with --accept-terms for: ${recipes.map((r) => r.label).join(', ')}.`);
+    return recipes;
+  }
+  if (!process.stdin.isTTY) {
+    console.error(`\nThe terms above must be accepted before anything is downloaded. Re-run with --accept-terms to accept them. Nothing was downloaded or written.`);
+    process.exit(2);
+  }
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const accepted = [];
+  try {
+    for (const recipe of recipes) {
+      const answer = await rl.question(`\nDo you accept the terms for the ${recipe.label} icons (${recipe.terms.url})? Type "yes" to continue: `);
+      if (answer.trim().toLowerCase() === 'yes') accepted.push(recipe);
+      else console.log(`Terms not accepted: ${recipe.label} will not be downloaded.`);
+    }
+  } finally {
+    rl.close();
+  }
+  return accepted;
+}
+
+/** Install one recipe's pack into every target directory; on failure put back what was there. */
+function installRecipe(opts, recipe, dirs) {
+  const generator = path.resolve(repoRoot, recipe.generator);
   const snap = snapshot(dirs, recipe.prefix);
   const cache = process.env.PACKS_CACHE_DIR ? ['--cache', path.resolve(process.env.PACKS_CACHE_DIR, recipe.prefix)] : [];
+  console.log(`\nInstalling ${recipe.label} (${recipe.prefix})...`);
   for (const dir of dirs) {
     const out = path.join(dir, `${recipe.prefix}.json`);
     const res = spawnSync(process.execPath, [generator, '--mapping', recipe.file, '--out', out, '--no-docs', ...(opts.offline ? ['--offline'] : []), ...cache], {
@@ -276,12 +287,52 @@ async function cmdAddRecipe(opts, name) {
     if (res.status !== 0) {
       restore(snap, recipe.prefix);
       const why = (res.stderr || res.stdout || res.error?.message || `exit status ${res.status}`).trim();
-      throw new Failure(`Installing ${recipe.label} into ${dir} failed; nothing was installed.\n${why}`);
+      throw new Failure(`Installing ${recipe.label} (${recipe.prefix}) into ${dir} failed; it was not installed.\n${why}`);
     }
     process.stdout.write(res.stdout);
   }
-  console.log(`\nInstalled ${recipe.label} (${recipe.prefix}) in: ${dirs.join(', ')}`);
-  console.log('Restart the server to load the change.');
+  console.log(`Installed ${recipe.label} (${recipe.prefix}) in: ${dirs.join(', ')}`);
+}
+
+async function cmdAddRecipes(opts, names) {
+  for (const name of names) checkName(name, 'recipe name');
+  const available = discoverRecipes(opts);
+  const unknown = names.filter((n) => !available.has(n));
+  if (unknown.length) {
+    throw new Failure(`No recipe named ${unknown.map((n) => `"${n}"`).join(', ')}. Available: ${[...available.keys()].join(', ') || 'none'}. To install your own pack use: add --file <iconify.json>`);
+  }
+  // Everything is checked before any terms are shown or anything is downloaded.
+  const recipes = [...new Set(names)].map((n) => available.get(n));
+  for (const recipe of recipes) {
+    checkTerms(recipe);
+    const generator = path.resolve(repoRoot, recipe.generator);
+    if (!fs.existsSync(generator)) throw new Failure(`The generator of recipe "${recipe.prefix}" is missing: ${generator}`);
+  }
+
+  for (const recipe of recipes) showTerms(opts, recipe);
+  const accepted = await acceptance(opts, recipes);
+
+  const dirs = targetDirs(opts);
+  const failed = [];
+  for (const recipe of accepted) {
+    try {
+      installRecipe(opts, recipe, dirs);
+    } catch (e) {
+      if (!(e instanceof Failure)) throw e;
+      console.error(`\n${e.message}`);
+      failed.push(recipe);
+    }
+  }
+  const installed = accepted.filter((r) => !failed.includes(r));
+  const declined = recipes.filter((r) => !accepted.includes(r));
+  if (installed.length) console.log(`\nInstalled: ${installed.map((r) => `${r.label} (${r.prefix})`).join(', ')}. Restart the server to load the change.`);
+  if (failed.length || declined.length) {
+    const parts = [
+      ...failed.map((r) => `${r.label} (${r.prefix}): installation failed, see above`),
+      ...declined.map((r) => `${r.label} (${r.prefix}): terms not accepted`),
+    ];
+    throw new Failure(`Not installed: ${parts.join('; ')}.`);
+  }
 }
 
 async function cmdAddFile(opts) {
@@ -363,7 +414,7 @@ async function main(argv) {
   if (opts.help) { console.log(HELP); return; }
   const [command, name, ...extra] = opts.positional;
   if (!command) throw new UsageError('missing command');
-  if (extra.length) throw new UsageError(`unexpected argument ${JSON.stringify(extra[0])}`);
+  if (extra.length && !(command === 'add' && opts.file === null)) throw new UsageError(`unexpected argument ${JSON.stringify(extra[0])}`);
   const reject = (...flags) => {
     for (const f of flags) if (f.on) throw new UsageError(`${f.name} is not valid with "${command}"`);
   };
@@ -384,8 +435,8 @@ async function main(argv) {
         reject(flagSet.accept, flagSet.offline);
         return cmdAddFile(opts);
       }
-      if (name === undefined) throw new UsageError('"add" needs a recipe name or --file <file>');
-      return cmdAddRecipe(opts, name);
+      if (name === undefined) throw new UsageError('"add" needs one or more recipe names, or --file <file>');
+      return cmdAddRecipes(opts, [name, ...extra]);
     case 'remove':
       if (name === undefined) throw new UsageError('"remove" needs a pack prefix');
       reject(flagSet.file, flagSet.accept, flagSet.offline);

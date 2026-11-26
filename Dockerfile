@@ -3,7 +3,9 @@
 #
 #   docker build -t sirenia .
 #   docker run --rm -p 8080:8080 -v sirenia-packs:/packs sirenia
-#   docker run --rm -it -v sirenia-packs:/packs sirenia packs add gcp
+#   docker run --rm -it -v sirenia-packs:/packs sirenia packs add gcp aws azure
+#   or, in one step: docker run --rm -p 8080:8080 -v sirenia-packs:/packs \
+#     -e SIRENIA_PACKS=gcp,aws,azure -e SIRENIA_ACCEPT_PACK_TERMS=yes sirenia
 #
 # This file is for local use only. The hosted edition is built from backend/Dockerfile and
 # frontend/Dockerfile as two services; nothing here changes them.
@@ -18,7 +20,8 @@
 # No vendor artwork is in the image, whatever tree it is built from: no packs directory is copied,
 # the editor build's dist/packs is deleted in the stage that builds it, and only the recipes'
 # mapping.json and README.md are kept. Packs are installed at run time into the /packs volume by the
-# explicit `packs add` command, which shows the vendor's terms first.
+# explicit `packs add` command, which shows the vendor's terms first, or by the launcher before it
+# starts the servers when SIRENIA_PACKS names them and SIRENIA_ACCEPT_PACK_TERMS=yes accepts the terms.
 #
 # node:22-slim is the same base and tag as frontend/Dockerfile (Node 22 LTS; the tag follows patch
 # releases and refreshed Debian layers). Pin by digest if you need byte-for-byte rebuilds.
@@ -37,7 +40,7 @@ ENV BRANDING_FILE=$BRANDING_FILE
 RUN npm run build \
  && rm -rf dist/packs
 
-# ---- tools: the pack generator's runtime dependency, and the pack recipes -----------------------
+# ---- tools: the pack generators' runtime dependency, and the pack recipes ----------------------
 FROM node:22-slim AS tools
 WORKDIR /src
 COPY package.json package-lock.json ./
@@ -123,10 +126,10 @@ COPY --from=proxy-deps /src/frontend/node_modules ./frontend/node_modules
 # package.json declares the proxy's files as ES modules ("type": "module").
 COPY frontend/package.json frontend/auth-proxy.js frontend/upstream.js frontend/packRecipes.js ./frontend/
 COPY --from=editor /src/frontend/dist ./frontend/dist
-# The packs command, its index builder, and the Google Cloud recipe's generator, which imports
-# fflate (resolved from /app/node_modules) and ./packs/pack-index.mjs; the command loads the render
-# service's pack validation from ../backend/utils/packFile.js.
-COPY scripts/packs.mjs scripts/build-gcp-icon-pack.mjs ./scripts/
+# The packs command, its index builder, and the recipes' generators (Google Cloud; AWS and Microsoft
+# Azure), which import fflate (resolved from /app/node_modules) and ./packs/pack-index.mjs; the
+# command and the generators load the render service's pack validation from ../backend/utils/packFile.js.
+COPY scripts/packs.mjs scripts/build-gcp-icon-pack.mjs scripts/build-icon-pack.mjs ./scripts/
 COPY scripts/packs/ ./scripts/packs/
 COPY --from=tools /src/icons ./icons
 COPY --from=tools /src/node_modules/fflate ./node_modules/fflate

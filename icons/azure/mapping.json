@@ -49,6 +49,12 @@
       "pattern": "^Azure_Public_Service_Icons/Icons/(?<group>[^/]+)/(?<id>\\d+) ?-icon-service-(?<name>[^/]+?) ?\\.svg$"
     }
   ],
+  "exclude": [
+    {
+      "pattern": "/10018-icon-service-Azure-A\\.svg$",
+      "reason": "The Azure logo (\"Azure A\"): a logo, not a product icon. The pack holds product icons only, as the AWS pack leaves out the group icon with the AWS logo."
+    }
+  ],
   "groups": {
     "ai + machine learning": "AI + machine learning",
     "analytics": "Analytics",

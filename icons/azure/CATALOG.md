@@ -3,7 +3,7 @@
 > **Generated** by `scripts/build-icon-pack.mjs` from `icons/azure/mapping.json` (version 2026.11). Do not edit by hand.
 > The icons come from the vendor's official set at <https://learn.microsoft.com/en-us/azure/architecture/icons/>. This file lists names only: the artwork is downloaded when you install the pack.
 
-**645 names**, 645 service icons. 629 distinct drawings; a name whose drawing is the same as another's is an alias of it.
+**644 names**, 644 service icons. 628 distinct drawings; a name whose drawing is the same as another's is an alias of it.
 
 Usage: `service x(azure:<icon>)[Name]` in `architecture-beta`, or `n@{ icon: "azure:<icon>", label: "Name" }` in a flowchart. Label each icon with its name.
 
@@ -613,7 +613,6 @@ Usage: `service x(azure:<icon>)[Name]` in `architecture-beta`, or `n@{ icon: "az
 | Arc SQL Managed Instance | `azure:arc-sql-managed-instance` | service icons |
 | Arc SQL Server | `azure:arc-sql-server` | service icons |
 | AVS VM | `azure:avs-vm` | service icons |
-| Azure A | `azure:azure-a` | service icons |
 | Azure Attestation | `azure:azure-attestation` | service icons |
 | Azure Backup Center | `azure:azure-backup-center` | service icons |
 | Azure Center for SAP | `azure:azure-center-for-sap` | service icons |
@@ -789,7 +788,7 @@ Usage: `service x(azure:<icon>)[Name]` in `architecture-beta`, or `n@{ icon: "az
 
 ## Not included
 
-- Nothing beyond the files the recipe does not select.
+- The Azure logo ("Azure A"): a logo, not a product icon. The pack holds product icons only, as the AWS pack leaves out the group icon with the AWS logo. (1 file)
 
 ## Same name, different icons
 

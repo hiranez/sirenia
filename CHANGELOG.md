@@ -4,6 +4,8 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-26
+
 ### Added
 
 - Icon pack recipes for the AWS Architecture Icons (prefix `aws`, 804 names: service, resource, group and category icons) and the Azure architecture icons (prefix `azure`, 644 names). As for Google Cloud, the repository holds recipes, not artwork: `packs add` downloads the vendor's file, checks its pinned SHA-256 checksum and installs the icons unmodified, after you accept the vendor's terms. Each recipe has a generated list of names (`icons/aws/CATALOG.md`, `icons/azure/CATALOG.md`). Both are built by one new generator, `scripts/build-icon-pack.mjs`, which gives the ids inside each icon (gradients, clip paths, masks) names of that icon, so that icons sharing a diagram never draw each other's gradients.

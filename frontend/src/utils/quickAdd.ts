@@ -1,13 +1,15 @@
 /**
  * The builder's quick add: one search over Mermaid's built-in icons and every installed pack's
- * catalog, and adding the chosen icon as a service. Pure functions, so they also run under `node --test`.
- * Matches are text (official name, pack, technical name); nothing here draws an icon.
+ * catalog, and adding the chosen icon as a service (architecture) or a node (flowchart). Pure
+ * functions, so they also run under `node --test`. Matches are text (official name, pack, technical
+ * name); nothing here draws an icon.
  */
 import { searchCatalog, diagramKind, type CatalogEntry } from './iconPicker.ts';
 import {
     BUILTIN_ICONS, addNode, findNode, parseArchitecture, startArchitecture,
     type ArchitectureModel, type EditResult,
 } from './architectureModel.ts';
+import { addNode as addFlowNode, findNode as findFlowNode, findSubgraph, type FlowchartModel, type EditResult as FlowEditResult } from './flowchartModel.ts';
 
 /** Where entries come from: a pack (its prefix and label) or Mermaid's built-in icons (prefix null). */
 export interface IconSource { prefix: string | null; label: string; entries: readonly CatalogEntry[] }
@@ -67,3 +69,20 @@ export const replacesNothing = (code: string): boolean => {
     const text = code.trim();
     return text === '' || (parseArchitecture(code) !== null && /^architecture-beta$/.test(text));
 };
+
+/** The subgraph a new flowchart node goes into: the selected subgraph, or the subgraph of the selected node. */
+export function subgraphFor(model: FlowchartModel, selectedId: string | null): string | null {
+    if (selectedId === null) return null;
+    const sub = findSubgraph(model, selectedId);
+    if (sub) return sub.managed ? sub.key : null;
+    const parent = findFlowNode(model, selectedId)?.parent ?? null;
+    return parent && findSubgraph(model, parent)?.managed ? parent : null;
+}
+
+/**
+ * Add a flowchart node with this label to subgraph `parent`: an icon node for a pack icon
+ * (`id@{ icon: "gcp:cloud-run", label: "Cloud Run" }`), a rectangle (`id["Label"]`) without one.
+ */
+export function quickAddFlowNode(code: string, label: string, icon: string | null, parent: string | null): FlowEditResult {
+    return addFlowNode(code, { label, icon, parent });
+}

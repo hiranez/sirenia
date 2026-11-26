@@ -755,6 +755,43 @@ a:hover,
   gap: 6px;
 }
 
+/* A flowchart's direction: four arrows in one control, like the SVG/PNG choice; the current one is inked. */
+.builder-segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--btn-line);
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+  box-shadow: 0 1.5px 0 var(--pop);
+}
+
+.builder-segment {
+  min-width: 26px;
+  min-height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--dur) ease, color var(--dur) ease;
+}
+
+.builder-segment:hover {
+  background: var(--row-hover);
+  color: var(--ink);
+}
+
+.builder-segment[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--sheet);
+}
+
 .builder kbd,
 .builder-shortcuts-pop kbd {
   display: inline-block;
@@ -1083,10 +1120,23 @@ a:hover,
   font-size: 14px;
 }
 
-.builder-start {
+.builder-start,
+.builder-start-group {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.builder-start-group {
+  width: 100%;
+}
+
+.builder-start-group h4 {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
 }
 
 /* Starter diagrams: cards with a title and one line, text only. */
@@ -1212,7 +1262,8 @@ a:hover,
   box-shadow: 1px 1.5px 0 var(--pop);
 }
 
-.builder-outline-row.selected code {
+.builder-outline-row.selected code,
+.builder-outline-row.selected .builder-outline-note {
   color: var(--ink-2);
 }
 
@@ -1234,12 +1285,14 @@ a:hover,
   text-transform: uppercase;
 }
 
-.builder-outline-kind.kind-group {
+.builder-outline-kind.kind-group,
+.builder-outline-kind.kind-subgraph {
   border-color: var(--violet-line);
   background: var(--violet);
 }
 
-.builder-outline-kind.kind-service {
+.builder-outline-kind.kind-service,
+.builder-outline-kind.kind-node {
   border-color: var(--amber-line);
   background: var(--amber);
 }
@@ -1475,6 +1528,15 @@ a:hover,
   fill: none;
   stroke: #ffffff;
   stroke-width: 2px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mermaid-preview svg .builder-selection-edge {
+  fill: none;
+  stroke: var(--mark-select);
+  stroke-width: 6px;
+  stroke-opacity: 0.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -2074,6 +2136,7 @@ a:hover,
   .menu-popup button,
   .builder-form input,
   .builder-form select,
+  .builder-segment,
   .icon-picker select,
   .icon-picker-controls input {
     min-height: 40px;

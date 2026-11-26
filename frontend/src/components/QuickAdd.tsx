@@ -1,26 +1,32 @@
 import React, { useId, useMemo, useState } from 'react';
-import { DEFAULT_ICON, iconOf, searchSources, type IconSource, type Match } from '../utils/quickAdd';
+import { iconOf, searchSources, type IconSource, type Match } from '../utils/quickAdd';
 
 const LIMIT = 8;
 
-/** What to add: a match, or (match null) the typed text as a label with the default icon. */
-export type QuickChoice = { label: string; icon: string; match: Match | null };
+/** What to add: a match, or (match null) the typed text as a label, with the default icon or none. */
+export type QuickChoice = { label: string; icon: string | null; match: Match | null };
 
 interface Props {
     sources: IconSource[];
     /** Labels of the packs whose icon lists are still loading. */
     loading: string[];
     disabled: boolean;
-    /** Where a new service goes, for the hint: a group's name, or null for the top level. */
+    /** Where a new item goes, for the hint: a group's or subgraph's name, or null for the top level. */
     place: string | null;
-    /** Adds the service; returns an error message to show, or null. */
+    /** Adds the item; returns an error message to show, or null. */
     onAdd: (choice: QuickChoice) => string | null;
     inputRef: React.RefObject<HTMLInputElement | null>;
+    /** What is added: "service" (architecture) or "node" (flowchart). */
+    noun: string;
+    placeholder: string;
+    /** For the typed text as a new item: what it becomes (pack column), and its icon (null: none). */
+    customNote: string;
+    customIcon: string | null;
 }
 
 // The quick add field: a combobox over the built-in icons and every installed pack. Enter adds the
 // highlighted match (or the typed text) and leaves the field empty, ready for the next one.
-const QuickAdd: React.FC<Props> = ({ sources, loading, disabled, place, onAdd, inputRef }) => {
+const QuickAdd: React.FC<Props> = ({ sources, loading, disabled, place, onAdd, inputRef, noun, placeholder, customNote, customIcon }) => {
     const id = useId();
     const [query, setQuery] = useState('');
     const [active, setActive] = useState(0);
@@ -33,7 +39,7 @@ const QuickAdd: React.FC<Props> = ({ sources, loading, disabled, place, onAdd, i
     const custom = text !== '' && !matches.some((m) => m.entry.name.toLowerCase() === text.toLowerCase());
     const options: QuickChoice[] = [
         ...matches.map((m) => ({ label: m.entry.name, icon: iconOf(m), match: m })),
-        ...(custom ? [{ label: text, icon: DEFAULT_ICON, match: null }] : []),
+        ...(custom ? [{ label: text, icon: customIcon, match: null }] : []),
     ];
     const at = Math.min(active, options.length - 1);
     const shown = open && text !== '';
@@ -81,7 +87,7 @@ const QuickAdd: React.FC<Props> = ({ sources, loading, disabled, place, onAdd, i
                     ref={inputRef}
                     type="text"
                     role="combobox"
-                    aria-label="Add a service"
+                    aria-label={`Add a ${noun}`}
                     aria-expanded={shown}
                     aria-controls={listId}
                     aria-autocomplete="list"
@@ -89,7 +95,7 @@ const QuickAdd: React.FC<Props> = ({ sources, loading, disabled, place, onAdd, i
                     aria-describedby={error ? errorId : undefined}
                     aria-invalid={error ? true : undefined}
                     aria-keyshortcuts="/"
-                    placeholder="Add a service: type a product or icon name"
+                    placeholder={placeholder}
                     autoComplete="off"
                     spellCheck={false}
                     disabled={disabled}
@@ -103,7 +109,7 @@ const QuickAdd: React.FC<Props> = ({ sources, loading, disabled, place, onAdd, i
             </div>
             {shown && (
                 <div className="quick-add-popup">
-                    <ul id={listId} role="listbox" aria-label="Services to add">
+                    <ul id={listId} role="listbox" aria-label={`${noun[0].toUpperCase()}${noun.slice(1)}s to add`}>
                         {options.map((o, i) => (
                             <li
                                 key={o.match ? `${o.icon}` : ':custom'}
@@ -127,9 +133,9 @@ const QuickAdd: React.FC<Props> = ({ sources, loading, disabled, place, onAdd, i
                                     </>
                                 ) : (
                                     <>
-                                        <span className="quick-add-name">New service “{o.label}”</span>
-                                        <span className="quick-add-pack">Built-in</span>
-                                        <code>{o.icon}</code>
+                                        <span className="quick-add-name">New {noun} “{o.label}”</span>
+                                        <span className="quick-add-pack">{customNote}</span>
+                                        {o.icon && <code>{o.icon}</code>}
                                     </>
                                 )}
                             </li>
@@ -143,7 +149,7 @@ const QuickAdd: React.FC<Props> = ({ sources, loading, disabled, place, onAdd, i
                 </div>
             )}
             <p className="sr-only" role="status" aria-live="polite">
-                {shown ? (total === 0 ? 'No icon matches. Enter adds a new service with this label.' : `${total} ${total === 1 ? 'match' : 'matches'}.`) : ''}
+                {shown ? (total === 0 ? `No icon matches. Enter adds a new ${noun} with this label.` : `${total} ${total === 1 ? 'match' : 'matches'}.`) : ''}
             </p>
             {error && <p id={errorId} className="builder-error" role="alert">{error}</p>}
         </div>

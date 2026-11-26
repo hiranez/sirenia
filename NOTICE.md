@@ -76,6 +76,16 @@ Diagrams are rendered with [Mermaid](https://mermaid.js.org) (MIT License, © Kn
 contributors). Mermaid is bundled into the image and the web editor; no CDN is used. Sirenia is an
 independent project and is not affiliated with or endorsed by the Mermaid project.
 
+## JetBrains Mono
+
+The web editor's interface font is [JetBrains Mono](https://www.jetbrains.com/lp/mono/)
+(© 2020 The JetBrains Mono Project Authors), licensed under the SIL Open Font License 1.1. Its
+latin subset is bundled into the editor at build time from the `@fontsource-variable/jetbrains-mono`
+package (a development dependency of `frontend/`). The licence text is in
+`frontend/public/licenses/JetBrainsMono-OFL.txt` and is served with the editor at
+`/licenses/JetBrainsMono-OFL.txt`; no font is loaded from another site. Diagram text is not set in this font: diagrams use Arial, as
+in the exported files.
+
 ## Container image
 
 The image also contains Node.js, Debian packages, fonts, and Chrome for Testing, each under its own

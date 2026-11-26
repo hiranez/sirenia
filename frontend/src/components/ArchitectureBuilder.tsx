@@ -152,7 +152,7 @@ const ArchitectureBuilder: React.FC<Props> = ({ code, onEdit, selection, onSelec
             >
                 {n ? (
                     <>
-                        <span className="builder-outline-kind">{n.kind}</span>
+                        <span className={`builder-outline-kind kind-${n.kind}`}>{n.kind}</span>
                         <span className="builder-outline-label">{nodeName(n)}</span>
                         {icon && <code>{icon}</code>}
                         {n.kind === 'service' && n.iconText !== null && <code>"{n.iconText}"</code>}

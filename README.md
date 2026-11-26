@@ -24,7 +24,7 @@ The editor has two tabs above the code. **Code** is the text editor. **Build** p
 You need Docker.
 
 ```bash
-docker run --rm -p 8080:8080 -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.6.2
+docker run --rm -p 8080:8080 -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.7.0
 ```
 
 Open <http://localhost:8080>.
@@ -70,7 +70,7 @@ The editor shows the same commands, with the vendors' links: open **Add an icon 
 ```bash
 docker run --rm -p 8080:8080 -v sirenia-packs:/packs \
   -e SIRENIA_PACKS=gcp,aws,azure -e SIRENIA_ACCEPT_PACK_TERMS=yes \
-  ghcr.io/hiranez/sirenia:1.6.2
+  ghcr.io/hiranez/sirenia:1.7.0
 ```
 
 - `SIRENIA_PACKS` names the packs to install: any of `gcp`, `aws` and `azure`, separated by commas.
@@ -85,7 +85,7 @@ Open <http://localhost:8080>. The **Insert icon...** button is above the code, a
 1. In a terminal, run:
 
    ```bash
-   docker run --rm -it -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.6.2 packs add gcp aws azure
+   docker run --rm -it -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.7.0 packs add gcp aws azure
    ```
 
    Name the packs you want. For each vendor it shows the terms and asks you to type `yes`; then it downloads the icons and checks each download against a pinned SHA-256 checksum. Without a terminal, add `--accept-terms`: it accepts the terms of the vendors named in the command.
@@ -98,7 +98,7 @@ Open <http://localhost:8080>. The **Insert icon...** button is above the code, a
 `packs list` shows the recipes and the packs you have installed:
 
 ```bash
-docker run --rm -it -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.6.2 packs list
+docker run --rm -it -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.7.0 packs list
 ```
 
 ### Docker Compose
@@ -131,7 +131,7 @@ When a vendor publishes a new set, a later Sirenia release carries a recipe with
 To remove a pack, then restart:
 
 ```bash
-docker run --rm -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.6.2 packs remove aws
+docker run --rm -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.7.0 packs remove aws
 ```
 
 A checksum mismatch means the vendor has changed its file since the recipe was made. Nothing is installed; use a newer release, or report it.

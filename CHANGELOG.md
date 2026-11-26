@@ -4,6 +4,13 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- Icon pack recipes for the AWS Architecture Icons (prefix `aws`, 804 names: service, resource, group and category icons) and the Azure architecture icons (prefix `azure`, 644 names). As for Google Cloud, the repository holds recipes, not artwork: `packs add` downloads the vendor's file, checks its pinned SHA-256 checksum and installs the icons unmodified, after you accept the vendor's terms. Each recipe has a generated list of names (`icons/aws/CATALOG.md`, `icons/azure/CATALOG.md`). Both are built by one new generator, `scripts/build-icon-pack.mjs`, which gives the ids inside each icon (gradients, clip paths, masks) names of that icon, so that icons sharing a diagram never draw each other's gradients.
+- One-command start with icons: `SIRENIA_PACKS=gcp,aws,azure` with `SIRENIA_ACCEPT_PACK_TERMS=yes` makes the container install the named packs before it starts the editor. Installed packs are skipped, so a restart downloads nothing. Without the acceptance setting the container does not start and lists each vendor's terms; a failed download is logged and the editor starts without that pack.
+- `packs add` takes several recipes at once (`packs add gcp aws azure`). It shows each vendor's terms and asks for each; `--accept-terms` accepts the terms of the vendors named on the command line.
+- "AWS Architecture" and "Azure Architecture" examples, shown when their pack is installed.
+
 ### Changed
 
 - A new look for the editor: warm paper colours, the code and the preview on cards, a monospace interface font (JetBrains Mono, bundled with the editor; nothing is loaded from another site), and buttons with a hard drop shadow; "Download Secure Image" is the one green button. Code and Build are pill tabs. The diagram sits on a white sheet on a faint grid, exactly as it exports; diagram text keeps the export's font (Arial).
@@ -13,6 +20,13 @@ All notable changes to Sirenia are recorded here. The format follows [Keep a Cha
 - In the Build tab, the outline shows the kind of each item as a small label (group, service, junction), and form fields have their labels above them.
 - The code field no longer underlines words as spelling mistakes.
 - On a phone, buttons and fields are at least 40 px high and the top bar fits the width of the screen.
+- "How to add an icon pack" lists each pack with its vendor, whether it is installed, and links to the vendor's icon page and terms. The commands add every pack not yet installed, starting with the one-command start.
+- An export loads only the icon packs its diagram refers to into the render page, instead of every installed pack. With the Google Cloud, AWS and Azure packs installed, a small flowchart exports in about 335 ms instead of 500 ms.
+- The README section "Icon packs" starts with a table of the four icon sets (Mermaid's built-in icons and the three packs), with the vendors' links and an example line for each.
+
+### Fixed
+
+- An export that used a pack icon written with a dash in place of the colon (`gcp-cloud-run`, which Mermaid draws like `gcp:cloud-run`) did not carry the vendor's trademark notice. It does now, in SVG and PNG.
 
 ## [1.6.2] - 2026-11-24
 

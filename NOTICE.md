@@ -40,6 +40,36 @@ used as logos, or presented in a way that implies Google's endorsement.
 Google periodically retires icons; the recipe tracks Google's current set (checksums pinned in
 `icons/gcp/mapping.json`). Legacy console icons (pre-2025) are intentionally not installed.
 
+## AWS Architecture Icons
+
+The `aws` recipe installs the official **AWS Architecture Icons** from the icon package AWS publishes
+at <https://aws.amazon.com/architecture/icons/>, where AWS allows customers and partners to use them
+to create architecture diagrams. This repository contains the recipe, not the artwork. The icons are
+installed unmodified: only render-identical normalization is applied (see `icons/aws/README.md`).
+
+> Amazon Web Services, AWS and the AWS Architecture Icons are
+> trademarks of Amazon.com, Inc. or its affiliates, used solely to depict AWS products in
+> architecture diagrams. Sirenia is an independent project, not affiliated with, sponsored by,
+> or endorsed by Amazon Web Services. The AWS Trademark Guidelines apply: <https://aws.amazon.com/trademark-guidelines/>.
+
+## Azure architecture icons
+
+The `azure` recipe installs the official **Azure architecture icons** from the files Microsoft
+publishes at <https://learn.microsoft.com/en-us/azure/architecture/icons/>, where Microsoft permits
+their use in architectural diagrams, training materials or documentation. This repository contains
+the recipe, not the artwork. The icons are installed unmodified: only render-identical normalization
+is applied (see `icons/azure/README.md`).
+
+> Azure, Microsoft and the Azure product icons are trademarks of the Microsoft group of companies,
+> used solely to depict Microsoft Azure products in architecture diagrams. Sirenia is an independent
+> project, not affiliated with, sponsored by, or endorsed by Microsoft. Microsoft's icon terms and
+> its Trademark and Brand Guidelines apply:
+> <https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks>.
+
+Every exported SVG/PNG that uses AWS or Azure icons carries the vendor's notice in its metadata
+(`Disclaimer`), as for Google Cloud icons. The icons must not be cropped, flipped, rotated, recoloured
+or distorted, or used to represent a product or service other than the vendor's own.
+
 ## Mermaid
 
 Diagrams are rendered with [Mermaid](https://mermaid.js.org) (MIT License, © Knut Sveidqvist and

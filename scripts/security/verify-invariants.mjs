@@ -183,7 +183,7 @@ function runStatic() {
       for (const src of sources) {
         const clean = src.replace(/^\.\//, '').replace(/\/+$/, '');
         const packsDir = clean.split('/').includes('packs') && clean !== 'scripts/packs';
-        if (packsDir || /(^|\/)gcp[\w-]*\.json$/.test(clean)) problems.push(`Dockerfile:${i + 1}  copies ${src}`);
+        if (packsDir || /(^|\/)(gcp|aws|azure)[\w-]*\.json$/.test(clean)) problems.push(`Dockerfile:${i + 1}  copies ${src}`);
       }
     });
     const ignore = fs.existsSync(path.join(ROOT, '.dockerignore')) ? read('.dockerignore').split('\n').map((l) => l.trim()) : null;
@@ -226,6 +226,20 @@ function runStatic() {
     if (!has(entry?.notice?.editor)) missing.push(`${rel} gcp notice.editor`);
   }
   check('Google Cloud trademark notice present in README, NOTICE.md, the pack recipe (editor and export notices) and the generated packs', missing.length === 0, `missing in: ${missing.join(', ')}`);
+
+  // The same for the other vendors' recipes: their trademark statement in the README, NOTICE.md and
+  // the recipe's editor and export notices.
+  for (const [prefix, vendor, statement] of [
+    ['aws', 'AWS', /trademarks of Amazon\.com, Inc\. or its affiliates/],
+    ['azure', 'Microsoft', /trademarks of the Microsoft group of companies/],
+  ]) {
+    if (!fs.existsSync(path.join(ROOT, 'icons', prefix, 'mapping.json'))) continue;
+    const absent = ['README.md', 'NOTICE.md'].filter((f) => !statement.test(read(f)));
+    let n = null;
+    try { n = JSON.parse(read(`icons/${prefix}/mapping.json`)).pack?.notice; } catch { /* reported below */ }
+    for (const k of ['editor', 'export']) if (!(typeof n?.[k] === 'string' && statement.test(n[k]))) absent.push(`icons/${prefix}/mapping.json pack.notice.${k}`);
+    check(`${vendor} trademark notice present in README, NOTICE.md and the ${prefix} recipe (editor and export notices)`, absent.length === 0, `missing in: ${absent.join(', ')}`);
+  }
 
   // Licence: the unmodified Apache-2.0 text, and every package manifest declares it.
   const APACHE_2_SHA256 = 'cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30';

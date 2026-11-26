@@ -15,7 +15,9 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "packs": "node scripts/packs.mjs",
     "icons:gcp": "node scripts/build-gcp-icon-pack.mjs",
-    "icons:gcp:check": "node scripts/build-gcp-icon-pack.mjs --check"
+    "icons:gcp:check": "node scripts/build-gcp-icon-pack.mjs --check",
+    "icons:aws": "node scripts/build-icon-pack.mjs --mapping icons/aws/mapping.json --out .cache/packs/aws.json",
+    "icons:azure": "node scripts/build-icon-pack.mjs --mapping icons/azure/mapping.json --out .cache/packs/azure.json"
   },
   "repository": {
     "type": "git",

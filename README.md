@@ -14,7 +14,7 @@ Sirenia is an independent project. It uses Mermaid and is not affiliated with or
 - **Exports are self-contained.** A diagram that would make the file load anything from somewhere else (an image URL, a font, a `url()` in theme CSS) is refused with a clear error. An exported file never calls out when someone opens it.
 - **The renderer cannot reach the network.** Diagrams are drawn in a headless browser whose every outbound request is blocked. Mermaid and icon packs are read from local disk, never from a CDN.
 - **Strict Mermaid settings.** `securityLevel: 'strict'`, labels drawn as SVG text and not HTML, and a diagram cannot switch either off from its own source.
-- **Icon packs are plug-ins.** Sirenia ships no vendor artwork. You add the packs you need, for example the official Google Cloud product icons, with one command that shows you the vendor's terms first.
+- **Icon packs are plug-ins.** Sirenia ships no vendor artwork. You add the packs you need, the official Google Cloud, AWS or Microsoft Azure icons, with one command that shows you each vendor's terms first.
 - **Editor and API.** Use the browser editor, or `POST /api/generate` from a script or a pipeline.
 
 The editor has two tabs above the code. **Code** is the text editor. **Build** puts an `architecture-beta` diagram together from forms: add groups, services, junctions and connections, choose icons by name (Mermaid's built-in ones, or a pack's through the icon picker), and click a node in the preview to select it. The Mermaid text stays the only copy of the diagram: each action is a small edit of it, shown as you build, and lines the builder does not manage are kept as they are. Undo and Redo cover builder actions, icon insertions and typing. Layout stays Mermaid's, and other kinds of diagram are edited as text.
@@ -50,28 +50,50 @@ To draw with a cloud provider's official icons, add an icon pack: see [Icon pack
 
 ## Icon packs
 
-A pack is a set of icons you can use in `architecture-beta` diagrams and flowchart icon shapes, for example `service api(gcp:cloud-run)[Cloud Run]`. Without a pack, the editor draws only Mermaid's built-in icons.
+Icons are drawn in `architecture-beta` diagrams and in flowchart icon shapes. Four sets can be used:
 
-Sirenia contains recipes, not artwork. A recipe knows where the vendor publishes its icons, the checksums of those files, and the vendor's terms of use. Installing a pack downloads the artwork from the vendor to your machine, after you accept those terms in the terminal.
+| Set | Prefix | Install | Vendor's icons | Vendor's terms | Example line |
+|---|---|---|---|---|---|
+| Mermaid's built-in icons: cloud, database, disk, internet, server | none | No, they are part of Mermaid | [Mermaid documentation](https://mermaid.js.org/syntax/architecture.html#icons) | [MIT licence](https://github.com/mermaid-js/mermaid/blob/develop/LICENSE) | `service db(database)[Database]` |
+| Google Cloud product icons | `gcp` | Yes | [cloud.google.com/icons](https://cloud.google.com/icons) | [Google brand resource center](https://about.google/brand-resource-center/) | `service run(gcp:cloud-run)[Cloud Run]` |
+| AWS Architecture Icons (Amazon Web Services) | `aws` | Yes | [aws.amazon.com/architecture/icons](https://aws.amazon.com/architecture/icons/) | [AWS Trademark Guidelines](https://aws.amazon.com/trademark-guidelines/) | `service web(aws:amazon-ec2)[Amazon EC2]` |
+| Azure architecture icons (Microsoft Azure) | `azure` | Yes | [learn.microsoft.com/azure/architecture/icons](https://learn.microsoft.com/en-us/azure/architecture/icons/) | [Icon terms](https://learn.microsoft.com/en-us/azure/architecture/icons/#icon-terms) | `service vm(azure:virtual-machine)[Virtual Machine]` |
 
-The editor shows the same commands: open **Add an icon pack...** above the code (or next to the icon field in the Build tab) while no pack is installed. The container also prints a hint when it starts.
+Each pack's names are listed in [icons/gcp/CATALOG.md](icons/gcp/CATALOG.md), [icons/aws/CATALOG.md](icons/aws/CATALOG.md) and [icons/azure/CATALOG.md](icons/azure/CATALOG.md). Label each icon with its official name, as in the examples.
 
-### With the published image
+Sirenia contains recipes, not artwork. A recipe knows where the vendor publishes its icons, the checksums of those files, and the vendor's terms of use. Installing a pack downloads the artwork from the vendor to your machine, after you accept those terms. The download happens only while a pack is installed: the editor and the render service never fetch anything.
 
-This adds the Google Cloud icons (the recipe `gcp`) to the container from the quick start.
+The editor shows the same commands, with the vendors' links: open **Add an icon pack...** above the code (or next to the icon field in the Build tab) while no pack is installed, or **Add another pack...** in the icon list. The container also prints a hint when it starts.
+
+### Start with icons, in one command
+
+```bash
+docker run --rm -p 8080:8080 -v sirenia-packs:/packs \
+  -e SIRENIA_PACKS=gcp,aws,azure -e SIRENIA_ACCEPT_PACK_TERMS=yes \
+  ghcr.io/hiranez/sirenia:1.6.2
+```
+
+- `SIRENIA_PACKS` names the packs to install: any of `gcp`, `aws` and `azure`, separated by commas.
+- `SIRENIA_ACCEPT_PACK_TERMS=yes` says that you accept the terms of each vendor you named (the links are in the table above). Without it the container does not start; it prints each vendor's terms link instead.
+
+Before the editor starts, the container downloads the packs that are not installed yet and checks each download against a pinned SHA-256 checksum; a mismatch stops that pack's installation. The packs are kept in the `sirenia-packs` volume, so a later start downloads nothing. If a download fails, the editor starts without that pack and the log says which pack is missing and why; start the container again to retry.
+
+Open <http://localhost:8080>. The **Insert icon...** button is above the code, and **Choose from a pack...** next to the icon field in the Build tab. The **Examples** menu has an example diagram for each pack.
+
+### Add packs to an installation that already runs
 
 1. In a terminal, run:
 
    ```bash
-   docker run --rm -it -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.6.2 packs add gcp
+   docker run --rm -it -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.6.2 packs add gcp aws azure
    ```
 
-   It shows the vendor's terms and asks you to type `yes`. Then it downloads the icons from the vendor and checks each download against a pinned SHA-256 checksum; a mismatch stops the install.
+   Name the packs you want. For each vendor it shows the terms and asks you to type `yes`; then it downloads the icons and checks each download against a pinned SHA-256 checksum. Without a terminal, add `--accept-terms`: it accepts the terms of the vendors named in the command.
 
-   The `-v sirenia-packs:/packs` part must be the same volume your server was started with. With a different volume, the pack is installed where the server does not look.
+   The `-v sirenia-packs:/packs` part must be the same volume your server was started with. With a different volume, the packs are installed where the server does not look.
 
 2. Stop the running container and start it again with the same command as before. Packs are read when the server starts, so a restart is needed.
-3. Reload the editor in the browser. The **Insert icon...** button now appears above the code, and **Choose from a pack...** next to the icon field in the Build tab.
+3. Reload the editor in the browser.
 
 `packs list` shows the recipes and the packs you have installed:
 
@@ -79,30 +101,40 @@ This adds the Google Cloud icons (the recipe `gcp`) to the container from the qu
 docker run --rm -it -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.6.2 packs list
 ```
 
-### Built from source
+### Docker Compose
 
-With Docker Compose, from the project folder:
+From the project folder:
 
 ```bash
-docker compose run --rm sirenia packs add gcp
+docker compose run --rm sirenia packs add gcp aws azure
 docker compose restart sirenia
 ```
 
-With the image built by hand, use its name in place of the published one: `docker run --rm -it -v sirenia-packs:/packs sirenia packs add gcp`.
+Or install the packs when the container starts: uncomment the `environment:` lines with `SIRENIA_PACKS` and `SIRENIA_ACCEPT_PACK_TERMS` in `docker-compose.yml`, then run `docker compose up -d`.
+
+With the image built by hand, use its name in place of the published one: `docker run --rm -it -v sirenia-packs:/packs sirenia packs add gcp aws azure`.
+
+### From source
 
 Without Docker, from the project folder (Node.js 22.12 or later, `npm ci` run once in the project folder):
 
 ```bash
-npm run packs -- add gcp
+npm run packs -- add gcp aws azure
 ```
 
-Then restart the two programs, the render service and the editor's server. Reload the page afterwards.
+Then restart the two programs, the render service and the editor's server, and reload the page. `node docker/entrypoint.mjs serve` starts both, and honours `SIRENIA_PACKS` and `SIRENIA_ACCEPT_PACK_TERMS` as the container does.
 
-### The recipes
+### Update or remove a pack
 
-| Recipe | Icons | Owner |
-|---|---|---|
-| `gcp` | Google Cloud product icons | Google |
+When a vendor publishes a new set, a later Sirenia release carries a recipe with the new checksums. To update an installed pack, run `packs add` for it again with that release, then restart. (`SIRENIA_PACKS` skips packs that are already installed, so it does not update them.)
+
+To remove a pack, then restart:
+
+```bash
+docker run --rm -v sirenia-packs:/packs ghcr.io/hiranez/sirenia:1.6.2 packs remove aws
+```
+
+A checksum mismatch means the vendor has changed its file since the recipe was made. Nothing is installed; use a newer release, or report it.
 
 ### Your own icons
 
@@ -149,6 +181,8 @@ Set these as environment variables on the container.
 |---|---|---|
 | `PORT` | `8080` | Port the server listens on |
 | `PACKS_DIR` | `/packs` | Directory that holds the installed icon packs |
+| `SIRENIA_PACKS` | | Icon packs to install before the servers start, for example `gcp,aws,azure`; installed ones are skipped |
+| `SIRENIA_ACCEPT_PACK_TERMS` | | `yes` accepts the terms of the vendors named in `SIRENIA_PACKS`; required when a pack is to be downloaded |
 | `RATE_LIMIT_PER_MIN` | `20` | Render requests allowed for each client in a minute |
 | `PRODUCT_NAME` | `Sirenia` | Name written into the notice that travels with pack icons |
 
@@ -202,6 +236,10 @@ Sirenia is the open-source project. Clonix Secure Diagram Studio is a hosted edi
 ## Trademarks
 
 Google Cloud and the Google Cloud product icons are trademarks of Google LLC. The `gcp` recipe lets you install them to depict Google Cloud products in architecture diagrams, under Google's terms. Sirenia is an independent project, not affiliated with, sponsored by, or endorsed by Google.
+
+Amazon Web Services, AWS and the AWS Architecture Icons are trademarks of Amazon.com, Inc. or its affiliates. The `aws` recipe lets you install them to depict AWS products in architecture diagrams, under AWS's terms. Sirenia is not affiliated with, sponsored by, or endorsed by Amazon Web Services.
+
+Azure, Microsoft and the Azure product icons are trademarks of the Microsoft group of companies. The `azure` recipe lets you install them to depict Microsoft Azure products in architecture diagrams, under Microsoft's terms. Sirenia is not affiliated with, sponsored by, or endorsed by Microsoft.
 
 Mermaid is a project of its own authors and contributors. All other trademarks belong to their owners.
 

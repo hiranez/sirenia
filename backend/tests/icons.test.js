@@ -91,6 +91,20 @@ check('packsUsedBy lists the referenced packs in pack order', () => {
   assert.deepStrictEqual(packsUsedBy('a(plain:bar)\nb(dots:dot)\nc(demo:box)\nd(demo:circle)'), ['demo', 'dots', 'plain']);
 });
 
+check('an icon written with a dash in place of the colon still counts as a use of its pack', () => {
+  const { packsUsedBy, attributionNotice } = fixtures;
+  // Mermaid draws demo-square with the icon demo:square, so the export must carry the notice.
+  assert.deepStrictEqual(packsUsedBy('service a(demo-square)[Sq]'), ['demo']);
+  assert.deepStrictEqual(packsUsedBy('n@{ icon: "demo-square", label: "Sq" }'), ['demo']);
+  assert.strictEqual(attributionNotice(packsUsedBy('service a(demo-square)[Sq]')), DEMO_NOTICE);
+  assert.deepStrictEqual(packsUsedBy('a(dots-dot)\nb(demo-square)'), ['demo', 'dots']);
+  // Not a use: a name the pack does not have, another word that ends in the prefix, another case.
+  assert.deepStrictEqual(packsUsedBy('demo-prod --> demo-test'), []);
+  assert.deepStrictEqual(packsUsedBy('service a(mydemo-square)[x]'), []);
+  assert.deepStrictEqual(packsUsedBy('service a(DEMO-square)[x]'), []);
+  assert.deepStrictEqual(packsUsedBy('service a(demo-square)[Sq]'), ['demo'], 'repeat call identical');
+});
+
 check('export notice: pack sentence plus the product independence sentence', () => {
   assert.strictEqual(fixtures.attributionNotice(['demo']), DEMO_NOTICE);
   assert.strictEqual(fixtures.attributionNotice(fixtures.packsUsedBy('service a(demo:square)[Sq]')), DEMO_NOTICE);
@@ -137,6 +151,25 @@ check('inline pack script is inert (no raw "<", U+2028/U+2029 escaped) and carri
   const page = JSON.parse(ICON_PACKS_SCRIPT.slice('window.__ICON_PACKS__='.length, -1));
   assert.deepStrictEqual(page[0].icons, demoPack().icons, 'icons reach the page unchanged');
   assert.deepStrictEqual(page[0].aliases, demoPack().aliases);
+});
+
+check('a render page gets only the packs its diagram may need', () => {
+  const { packsForRender, iconPacksScript, ICON_PACKS_SCRIPT } = fixtures;
+  const page = (prefixes) => JSON.parse(iconPacksScript(prefixes).slice('window.__ICON_PACKS__='.length, -1)).map((p) => p.prefix);
+  assert.deepStrictEqual(packsForRender('graph TD; A-->B'), []);
+  assert.strictEqual(iconPacksScript(packsForRender('graph TD; A-->B')), 'window.__ICON_PACKS__=[];');
+  assert.deepStrictEqual(packsForRender('architecture-beta\n  service a(dots:dot)[Dot]'), ['dots']);
+  assert.deepStrictEqual(packsForRender('n@{ icon: "plain:bar" }\nm@{ icon: "demo:box" }'), ['demo', 'plain']);
+  // Wider than packsUsedBy: Mermaid also reads `demo-square` as demo:square; any case; inside labels.
+  assert.deepStrictEqual(packsForRender('service a(demo-square)[x]'), ['demo']);
+  assert.deepStrictEqual(packsForRender('service a(cloud)[DEMO: the plan]'), ['demo']);
+  // Not a reference: part of a longer word, or a prefix without ":" or "-".
+  assert.deepStrictEqual(packsForRender('service a(cloud)[mydemo:x xdots-y plain]'), []);
+  assert.deepStrictEqual(page(['plain', 'demo', 'nope']), ['demo', 'plain'], 'pack order, unknown prefixes ignored');
+  assert.strictEqual(iconPacksScript(['demo', 'dots', 'plain']), ICON_PACKS_SCRIPT, 'all packs: the same script as before');
+  const nested = loadPacks(packDir({ 'demo.json': demoPack(), 'demo-two.json': { ...demoPack(), prefix: 'demo-two' } }), 'Test');
+  assert.deepStrictEqual(nested.packsForRender('a(demo-two:square)').sort(), ['demo', 'demo-two'], 'a prefix inside another is still found');
+  assert.deepStrictEqual(loadPacks(packDir({}), 'Test').packsForRender('a(demo:square)'), []);
 });
 
 check('icon bodies may use same-document references (ids, gradients, <use href="#id">, url(#id))', () => {

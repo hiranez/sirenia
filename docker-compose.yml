@@ -2,11 +2,13 @@
 # icon packs in a named volume. Then open http://localhost:8080
 #
 #   Start:       docker compose up -d --build
-#   Add a pack:  docker compose run --rm sirenia packs add gcp
+#   Add packs:   docker compose run --rm sirenia packs add gcp aws azure
 #                docker compose restart sirenia
 #
-# The packs command shows the vendor's terms and asks you to accept them before it downloads
+# The packs command shows each vendor's terms and asks you to accept them before it downloads
 # anything. "docker compose run --rm sirenia packs list" shows the recipes and installed packs.
+# To install packs when the container starts instead, uncomment the two settings below: the second
+# one accepts the terms of the vendors named in the first (packs already installed are skipped).
 services:
   sirenia:
     build: .
@@ -14,6 +16,9 @@ services:
       - "8080:8080"
     volumes:
       - sirenia-packs:/packs
+    # environment:
+    #   SIRENIA_PACKS: gcp,aws,azure
+    #   SIRENIA_ACCEPT_PACK_TERMS: "yes"
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped

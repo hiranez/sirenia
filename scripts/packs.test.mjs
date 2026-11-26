@@ -180,6 +180,101 @@ describe('add <recipe>', () => {
   });
 });
 
+// A generator that writes a one-icon pack for the recipe it is given, or fails when the recipe says so.
+const PACK_WRITER = `
+  import fs from 'node:fs';
+  import path from 'node:path';
+  const arg = (name) => process.argv[process.argv.indexOf(name) + 1];
+  const mapping = JSON.parse(fs.readFileSync(arg('--mapping'), 'utf8'));
+  if (mapping.fail) { console.error('sha256 mismatch for icons: expected 00, got 11'); process.exit(1); }
+  const out = arg('--out');
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  fs.writeFileSync(out, JSON.stringify({ prefix: mapping.prefix, sirenia: { format: 1, label: mapping.pack.label }, icons: { a: { body: '<rect width="1" height="1"/>' } } }));
+  const packs = fs.readdirSync(path.dirname(out)).filter((n) => n.endsWith('.json') && n !== 'index.json').sort();
+  fs.writeFileSync(path.join(path.dirname(out), 'index.json'), JSON.stringify({ format: 1, packs: packs.map((n) => ({ prefix: n.slice(0, -5), file: n })) }));
+`;
+
+// A recipes directory with several recipes that share the generator above.
+function fixtureRecipes(specs) {
+  const recipes = fresh('recipes');
+  const gen = write(path.join(recipes, 'gen.mjs'), PACK_WRITER);
+  for (const { prefix, label, fail } of specs) {
+    write(path.join(recipes, prefix, 'mapping.json'), {
+      prefix,
+      ...(fail ? { fail: true } : {}),
+      pack: {
+        label,
+        owner: `${label} Inc.`,
+        generator: gen,
+        terms: { summary: [`${label} icons are ${label} trademarks.`], url: `https://example.com/${prefix}-terms` },
+      },
+      upstream: { zips: { icons: { url: `https://example.com/${prefix}.zip`, sha256: '0'.repeat(64) } } },
+    });
+  }
+  return recipes;
+}
+
+describe('add with several recipes', () => {
+  const two = () => fixtureRecipes([{ prefix: 'acme', label: 'Acme Cloud' }, { prefix: 'beta', label: 'Beta Cloud' }]);
+
+  test('one command installs each named recipe; --accept-terms covers the ones named', () => {
+    const recipes = two();
+    const dir = fresh();
+    const r = run(['add', 'acme', 'beta', '--dir', dir, '--recipes', recipes, '--accept-terms']);
+    assert.equal(r.status, 0, r.all);
+    assert.deepEqual(listing(dir), ['acme.json', 'beta.json', 'index.json']);
+    for (const label of ['Acme Cloud', 'Beta Cloud']) assert.match(r.out, new RegExp(`${label} icons are ${label} trademarks`));
+    assert.match(r.out, /https:\/\/example\.com\/acme-terms[\s\S]*https:\/\/example\.com\/beta-terms/);
+    assert.match(r.out, /accepted with --accept-terms for: Acme Cloud, Beta Cloud/);
+    assert.match(r.out, /Installed: Acme Cloud \(acme\), Beta Cloud \(beta\)\. Restart the server/);
+  });
+
+  test('without acceptance and without a terminal: every vendor\'s terms are shown, nothing is written', () => {
+    const dir = fresh();
+    const r = run(['add', 'acme', 'beta', '--dir', dir, '--recipes', two()]);
+    assert.equal(r.status, 2, r.all);
+    assert.match(r.out, /acme-terms/);
+    assert.match(r.out, /beta-terms/);
+    assert.match(r.err, /--accept-terms/);
+    assert.equal(listing(dir), null);
+  });
+
+  test('an unknown name stops everything before any terms are shown or files written', () => {
+    const dir = fresh();
+    const r = run(['add', 'acme', 'nope', 'other', '--dir', dir, '--recipes', two(), '--accept-terms']);
+    assert.equal(r.status, 1, r.all);
+    assert.match(r.err, /No recipe named "nope", "other"\. Available: acme, beta/);
+    assert.doesNotMatch(r.out, /Terms \(summary\)/);
+    assert.equal(listing(dir), null);
+  });
+
+  test('a failing recipe is reported and leaves nothing behind; the others are installed', () => {
+    const recipes = fixtureRecipes([{ prefix: 'acme', label: 'Acme Cloud', fail: true }, { prefix: 'beta', label: 'Beta Cloud' }]);
+    const dir = fresh();
+    const r = run(['add', 'acme', 'beta', '--dir', dir, '--recipes', recipes, '--accept-terms']);
+    assert.equal(r.status, 1, r.all);
+    assert.match(r.err, /Installing Acme Cloud \(acme\) into .* failed[\s\S]*sha256 mismatch/);
+    assert.match(r.err, /Not installed: Acme Cloud \(acme\): installation failed/);
+    assert.deepEqual(listing(dir), ['beta.json', 'index.json']);
+  });
+
+  test('a name given twice is installed once; "all" is not a recipe name', () => {
+    const recipes = two();
+    const dir = fresh();
+    const r = run(['add', 'beta', 'beta', '--dir', dir, '--recipes', recipes, '--accept-terms']);
+    assert.equal(r.status, 0, r.all);
+    assert.equal(r.out.match(/Installing Beta Cloud/g).length, 1);
+    const all = run(['add', 'all', '--dir', fresh(), '--recipes', recipes, '--accept-terms']);
+    assert.equal(all.status, 1, all.all);
+    assert.match(all.err, /No recipe named "all"/);
+  });
+
+  test('a bad name among several is a usage error', () => {
+    const r = run(['add', 'acme', '../x', '--dir', fresh(), '--recipes', two()]);
+    assert.equal(r.status, 2, r.all);
+  });
+});
+
 describe('add --file', () => {
   test('installs a valid pack unchanged into every --dir and rebuilds the index', () => {
     const file = write(path.join(fresh('src'), 'whatever-name.json'), `${JSON.stringify(demoPack())}\n`);

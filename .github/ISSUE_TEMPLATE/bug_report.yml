@@ -1,0 +1,74 @@
+name: Bug report
+description: Something does not work the way the README says it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to write this down.
+
+        **Security problems do not go here.** Use the private route in SECURITY.md: on the repository page choose **Security**, then **Report a vulnerability**.
+
+        This tracker is for the open-source project. Problems with a hosted edition built from Sirenia go to the operator of that edition.
+
+        A diagram can describe real infrastructure. Remove names, addresses and anything else you would not post in public before you paste a diagram or a log.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The image tag you run, or the commit if you run from source.
+      placeholder: "1.8.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How you run it
+      options:
+        - The published image from ghcr.io
+        - Docker Compose
+        - An image built from the Dockerfile
+        - From source with Node.js
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where it goes wrong
+      options:
+        - The editor, Code tab
+        - The editor, Build tab
+        - Exporting an SVG or a PNG
+        - Restoring a diagram from an export
+        - The API
+        - An icon pack
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Diagram source
+      description: The smallest diagram that shows the problem, if the problem depends on one.
+      render: text
+  - type: textarea
+    id: log
+    attributes:
+      label: Error message or container log
+      description: The text of the error card in the editor, the API response, or the relevant lines of the container log.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send
+      options:
+        - label: I removed anything private from the diagram and the log.
+          required: true
+        - label: This is not a security problem.
+          required: true

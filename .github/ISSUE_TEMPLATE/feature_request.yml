@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest a change, an addition or a new icon pack.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For anything larger than a small fix, an issue first saves you from building something that cannot be merged. See CONTRIBUTING.md.
+
+        Asking for an icon pack? Say which vendor, and link the vendor's published icons and its terms of use. A recipe holds no artwork; "Adding a pack recipe" in CONTRIBUTING.md says what it must do.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way? Describe the situation before the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you would like to see
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today, or what else you considered
+  - type: dropdown
+    id: rules
+    attributes:
+      label: Does it touch one of the rules in CONTRIBUTING.md?
+      description: The renderer's network, strict Mermaid settings, self-contained exports, the editor's content security policy, vendor artwork, dependencies and pinned actions. A change that weakens one of them needs a very good reason and is discussed first.
+      options:
+        - No, as far as I can tell
+        - Yes, so it needs a discussion first
+        - I am not sure
+    validations:
+      required: true
+  - type: checkboxes
+    id: build
+    attributes:
+      label: Who builds it
+      options:
+        - label: I would like to open the pull request myself.

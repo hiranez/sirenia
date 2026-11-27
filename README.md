@@ -231,7 +231,7 @@ Sirenia is built to render diagrams from people you do not fully trust, but it h
 
 ## Editions
 
-Sirenia is the open-source project. Clonix Secure Diagram Studio is a hosted edition operated by Clonix; it is built from Sirenia, says so in its footer, and bundles icon packs.
+Sirenia is the open-source project. Clonix Secure Diagram Studio is a hosted edition based on Sirenia. It is operated by Clonix, not by this project, names Sirenia in its footer, and bundles icon packs, which the open-source project does not ship.
 
 ## Trademarks
 
